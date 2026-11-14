@@ -181,3 +181,41 @@ fun FromOtherApps(modifier: Modifier = Modifier, limit: Int = 3) {
         }
     }
 }
+
+/**
+ * "Set up like ObsiRead": shown while this app has no vault folder and another Obsi app has one.
+ * One tap copies the vault and tags, and opens the folder picker right at that vault's folder.
+ */
+@Composable
+fun SameSetupCard(needed: Boolean, onApply: (app.obsi.core.share.ObsiSetup, String) -> Unit, modifier: Modifier = Modifier) {
+    if (!needed) return
+    val context = LocalContext.current
+    var setups by remember { mutableStateOf(emptyList<app.obsi.core.share.ObsiSetup>()) }
+    LaunchedEffect(Unit) { setups = app.obsi.core.share.SharedSetup.fromOthers(context) }
+    var picking by remember { mutableStateOf<app.obsi.core.share.ObsiSetup?>(null) }
+    val picker = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocumentTree()) { uri ->
+        val setup = picking ?: return@rememberLauncherForActivityResult
+        picking = null
+        if (uri == null) return@rememberLauncherForActivityResult
+        val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        runCatching { context.contentResolver.takePersistableUriPermission(uri, flags) }
+        onApply(setup, uri.toString())
+        android.widget.Toast.makeText(context, "Linked ${setup.vault.ifBlank { "your vault" }}.", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    val setup = setups.firstOrNull() ?: return
+    val scheme = MaterialTheme.colorScheme
+    Surface(shape = RoundedCornerShape(20.dp), color = scheme.secondaryContainer, modifier = modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Set up like ${setup.app.title}", style = MaterialTheme.typography.titleMedium, color = scheme.onSecondaryContainer)
+            Spacer(Modifier.padding(top = 4.dp))
+            Text(
+                "Use the vault “${setup.vault.ifBlank { "your vault" }}” and your tags. Android asks you to pick the folder once. It opens right there.",
+                style = MaterialTheme.typography.bodyMedium, color = scheme.onSecondaryContainer,
+            )
+            Spacer(Modifier.padding(top = 10.dp))
+            androidx.compose.material3.Button(onClick = { picking = setup; picker.launch(android.net.Uri.parse(setup.folder)) }) {
+                Text("Use the same vault")
+            }
+        }
+    }
+}

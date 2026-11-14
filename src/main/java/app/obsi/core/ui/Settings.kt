@@ -509,6 +509,11 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
                 var vaultMenu by remember { mutableStateOf<String?>(null) }
                 var addVault by remember { mutableStateOf(false) }
                 var nameOnly by remember { mutableStateOf(false) }
+                SameSetupCard(
+                    needed = s.vaultFolders.isEmpty(),
+                    onApply = { setup, folder -> set { SharedSetup.apply(it, setup, folder) }; app.vaults.refresh(setup.vault, force = true) },
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
                 Section("Vaults", footer = "${Brand.name} reads your notes, folders and tags so you can pick them when you save. It writes only when you save a clip.") {
                     s.vaults.forEach { v ->
                         val linked = s.vaultFolders.containsKey(v)

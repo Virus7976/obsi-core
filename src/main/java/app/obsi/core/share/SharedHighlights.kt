@@ -81,6 +81,7 @@ class SharedHighlightsProvider : ContentProvider() {
     override fun onCreate(): Boolean = true
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? {
+        if (uri.lastPathSegment == "setup") return SharedSetup.cursor()
         if (uri.lastPathSegment != "highlights") return null
         val rows = runCatching { SharedHighlights.source?.invoke() }.getOrNull().orEmpty()
         return SharedHighlights.cursor(rows)
