@@ -131,11 +131,11 @@ fun OtherHighlightRow(h: SharedHighlight, modifier: Modifier = Modifier) {
 }
 
 /** The other apps' highlights as list rows, one group per app, each under its own name. */
-fun LazyListScope.otherHighlights(rows: List<SharedHighlight>) {
+fun LazyListScope.otherHighlights(rows: List<SharedHighlight>, sides: androidx.compose.ui.unit.Dp = 0.dp) {
     rows.groupBy { it.app }.forEach { (from, list) ->
         item("obsi-head-" + from.name) {
             val scheme = MaterialTheme.colorScheme
-            Row(Modifier.fillMaxWidth().padding(top = 18.dp, start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(top = 18.dp, start = sides + 4.dp, end = sides + 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(from.icon, null, tint = scheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("From ${from.title}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
@@ -143,15 +143,15 @@ fun LazyListScope.otherHighlights(rows: List<SharedHighlight>) {
             }
         }
         itemsIndexed(list, key = { i, _ -> "obsi-" + from.name + "-" + i }) { _, h ->
-            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainer) { OtherHighlightRow(h) }
+            Surface(shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.padding(horizontal = sides, vertical = 4.dp)) { OtherHighlightRow(h) }
         }
     }
 }
 
 /** "Your Obsi apps" with the switcher under it. For the top of Settings. */
 @Composable
-fun ObsiAppsSection(modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+fun ObsiAppsSection(modifier: Modifier = Modifier, sides: androidx.compose.ui.unit.Dp = 16.dp) {
+    Column(modifier.fillMaxWidth().padding(horizontal = sides, vertical = 8.dp)) {
         Text("Your Obsi apps", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
         ObsiAppsRow()
     }

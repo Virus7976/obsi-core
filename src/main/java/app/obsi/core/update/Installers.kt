@@ -79,7 +79,7 @@ class AdbInstaller private constructor(private val context: Context) {
             }
             if (p == null || c == null) {
                 val pair: KeyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048, SecureRandom.getInstance("SHA1PRNG")) }.generateKeyPair()
-                val subject = "CN=Marginalia"
+                val subject = "CN=" + app.obsi.core.Brand.name
                 val algorithm = "SHA512withRSA"
                 val from = Date()
                 val to = Date(System.currentTimeMillis() + 10L * 365 * 86_400_000)
@@ -109,7 +109,7 @@ class AdbInstaller private constructor(private val context: Context) {
 
         override fun getPrivateKey(): PrivateKey = priv
         override fun getCertificate(): Certificate = cert
-        override fun getDeviceName(): String = "Marginalia"
+        override fun getDeviceName(): String = app.obsi.core.Brand.name
     }
 
     private val manager: AbsAdbConnectionManager = Manager(context.filesDir)
