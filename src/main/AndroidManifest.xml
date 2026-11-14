@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+    Each Obsi app guards its highlights with its own permission. Only apps signed with one of the
+    three Obsi keys get it (knownSigner, Android 12 and up). Each name is its own, because two apps
+    with different keys may not define the same permission.
+    -->
+    <permission
+        android:name="${applicationId}.permission.OBSI_SHARE"
+        android:label="Share highlights between the Obsi apps"
+        android:protectionLevel="signature|knownSigner"
+        android:knownCerts="@array/obsi_certs" />
+
+    <uses-permission android:name="app.marginalia.permission.OBSI_SHARE" />
+    <uses-permission android:name="app.obsiread.permission.OBSI_SHARE" />
+    <uses-permission android:name="app.obsibible.permission.OBSI_SHARE" />
+
+    <!-- Android 11 and up hides other apps unless they are named here. -->
+    <queries>
+        <package android:name="app.marginalia" />
+        <package android:name="app.obsiread" />
+        <package android:name="app.obsibible" />
+    </queries>
+
+    <application>
+        <provider
+            android:name="app.obsi.core.share.SharedHighlightsProvider"
+            android:authorities="${applicationId}.obsi"
+            android:exported="true"
+            android:readPermission="${applicationId}.permission.OBSI_SHARE" />
+    </application>
+</manifest>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- SHA-256 of the signing certificates that may read Obsi highlights. -->
+    <string-array name="obsi_certs" translatable="false">
+        <!-- ObsiTube -->
+        <item>5B807A27A34CDB309C265EA2D24250CF0C574C7EFF19DA2B605DD2A90BD8B8D4</item>
+        <!-- ObsiRead -->
+        <item>6C27B6D1B13E55F7D725A86185442E050FAC4B832F878F6F230A427A5719F4C5</item>
+        <!-- Obsi Bible -->
+        <item>D40BA3C433EC074F512DD9860513C4AB7569D6A3F8D5AD76FD4C859FFB3DE15C</item>
+        <!-- Local debug builds on Jake's PC, for testing -->
+        <item>B898B30A2CA8ADA72F5F968ECA5F1099428B4B2862160353E5D11E603FB589DC</item>
+    </string-array>
+</resources>
