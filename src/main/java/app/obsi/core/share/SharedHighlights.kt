@@ -27,6 +27,8 @@ data class SharedHighlight(
     val place: String,
     val created: Long,
     val tags: List<String> = emptyList(),
+    /** The highlight's own id, for review. */
+    val key: String = "",
 )
 
 /**
@@ -39,12 +41,12 @@ object SharedHighlights {
     @Volatile
     var source: (() -> List<SharedHighlight>)? = null
 
-    private val columns = arrayOf("item_id", "item_title", "text", "note", "color", "at", "place", "created", "tags")
+    private val columns = arrayOf("item_id", "item_title", "text", "note", "color", "at", "place", "created", "tags", "key")
 
     fun authority(app: ObsiApp) = "${app.pkg}.obsi"
 
     internal fun cursor(rows: List<SharedHighlight>): Cursor = MatrixCursor(columns, rows.size).apply {
-        rows.forEach { addRow(arrayOf<Any>(it.itemId, it.itemTitle, it.text, it.note, it.color, it.at, it.place, it.created, it.tags.joinToString("\u001f"))) }
+        rows.forEach { addRow(arrayOf<Any>(it.itemId, it.itemTitle, it.text, it.note, it.color, it.at, it.place, it.created, it.tags.joinToString("\u001f"), it.key)) }
     }
 
     /** The highlights of the other Obsi apps on this phone. An app that is missing or old gives none. */
@@ -52,8 +54,8 @@ object SharedHighlights {
         Brand.others.filter { it.installed(context) }.flatMap { other -> read(context, other) }
     }
 
-    fun read(context: Context, from: ObsiApp): List<SharedHighlight> = runCatching {
-        val uri = Uri.parse("content://${authority(from)}/highlights")
+    fun read(context: Context, from: ObsiApp, path: String = "highlights"): List<SharedHighlight> = runCatching {
+        val uri = Uri.parse("content://${authority(from)}/$path")
         context.contentResolver.query(uri, null, null, null, null)?.use { c ->
             val out = ArrayList<SharedHighlight>(c.count)
             fun s(name: String) = c.getString(c.getColumnIndexOrThrow(name)).orEmpty()
@@ -69,6 +71,7 @@ object SharedHighlights {
                     place = s("place"),
                     created = c.getLong(c.getColumnIndexOrThrow("created")),
                     tags = s("tags").split('\u001f').filter { it.isNotBlank() },
+                    key = if (c.getColumnIndex("key") >= 0) s("key") else "",
                 )
             }
             out
@@ -82,9 +85,19 @@ class SharedHighlightsProvider : ContentProvider() {
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? {
         if (uri.lastPathSegment == "setup") return SharedSetup.cursor()
+        if (uri.lastPathSegment == "due") return SharedHighlights.cursor(runCatching { SharedReview.due?.invoke() }.getOrNull().orEmpty())
         if (uri.lastPathSegment != "highlights") return null
         val rows = runCatching { SharedHighlights.source?.invoke() }.getOrNull().orEmpty()
         return SharedHighlights.cursor(rows)
+    }
+
+    /** "review": another Obsi app kept, skipped or dropped one of our highlights. */
+    override fun call(method: String, arg: String?, extras: android.os.Bundle?): android.os.Bundle? {
+        val ctx = context ?: return null
+        // call() has no permission of its own, so check the same one the reads need.
+        ctx.enforceCallingPermission(ctx.packageName + ".permission.OBSI_SHARE", "Only the Obsi apps may do this.")
+        if (method == "review" && arg != null) SharedReview.act?.invoke(arg, extras?.getString("action") ?: "later")
+        return null
     }
 
     override fun getType(uri: Uri): String = "vnd.android.cursor.dir/vnd.obsi.highlight"
