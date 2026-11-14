@@ -147,6 +147,8 @@ data class AppSettings(
     val paragraphSpacing: Float = 1f,
     /** Extra room between letters, in em. */
     val letterSpacing: Float = 0f,
+    /** How fast Listen reads, 1 is normal. */
+    val listenRate: Float = 1f,
     /** The space at each side of the text, in dp. */
     val sideMargin: Int = 18,
     val justify: Boolean = false,
