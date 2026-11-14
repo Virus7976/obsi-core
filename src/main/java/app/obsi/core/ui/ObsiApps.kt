@@ -156,3 +156,28 @@ fun ObsiAppsSection(modifier: Modifier = Modifier, sides: androidx.compose.ui.un
         ObsiAppsRow()
     }
 }
+
+/**
+ * The other two apps and your newest highlights in them. For a Home screen that is a plain
+ * column. Shows only the switcher when there are no highlights yet.
+ */
+@Composable
+fun FromOtherApps(modifier: Modifier = Modifier, limit: Int = 3) {
+    val rows = rememberOtherHighlights()
+    val scheme = MaterialTheme.colorScheme
+    Column(modifier.fillMaxWidth()) {
+        Text("Your other apps", style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.padding(top = 4.dp))
+        Text(
+            if (rows.isEmpty()) "Open " + Brand.others.joinToString(" or ") { it.title } + " in one tap."
+            else "Your newest highlights in " + Brand.others.joinToString(" and ") { it.title } + ".",
+            color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium,
+        )
+        Spacer(Modifier.padding(top = 12.dp))
+        ObsiAppsRow()
+        rows.take(limit).forEach { h ->
+            Spacer(Modifier.padding(top = 10.dp))
+            Surface(shape = RoundedCornerShape(18.dp), color = scheme.surfaceContainer) { OtherHighlightRow(h) }
+        }
+    }
+}
