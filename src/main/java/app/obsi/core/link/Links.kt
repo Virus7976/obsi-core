@@ -27,6 +27,8 @@ object Links {
         "openbible.info", "biblia.com", "stepbible.org", "netbible.org",
     )
 
+    private val videoFile = Regex("""\.(mp4|m4v|mkv|webm|mov|m3u8|mpd|mp3|m4a)$""")
+
     private val url = Regex("""(?:https?|obsibible)://[^\s<>"']+""", RegexOption.IGNORE_CASE)
 
     /** The first link in a shared text, or null. */
@@ -38,6 +40,9 @@ object Links {
         if (link.startsWith("obsibible:", true)) return ObsiApp.Bible
         val host = runCatching { Uri.parse(link).host.orEmpty() }.getOrDefault("").lowercase().removePrefix("www.")
         if (host.isBlank()) return null
+        // A link straight to a video file is a lesson.
+        val path = runCatching { Uri.parse(link).path.orEmpty() }.getOrDefault("").lowercase()
+        if (videoFile.containsMatchIn(path)) return ObsiApp.Learn
         return when {
             youTubeHosts.any { host == it || host.endsWith(".$it") } -> ObsiApp.Tube
             bibleHosts.any { host == it || host.endsWith(".$it") } -> ObsiApp.Bible
@@ -55,6 +60,8 @@ object Links {
         if (intent?.getStringExtra(EXTRA_FROM) != null) return false
         val to = target(text) ?: return false
         if (to == Brand.app) return false
+        // A video file goes to ObsiLearn only when it is on the phone. Otherwise the app that got it keeps it.
+        if (to == ObsiApp.Learn && !to.installed(context)) return false
         handOff(context, to, text)
         return true
     }

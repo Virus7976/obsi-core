@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Article
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,9 +48,10 @@ val ObsiApp.icon: ImageVector
         ObsiApp.Tube -> Icons.Rounded.SmartDisplay
         ObsiApp.Read -> Icons.AutoMirrored.Rounded.Article
         ObsiApp.Bible -> Icons.AutoMirrored.Rounded.MenuBook
+        ObsiApp.Learn -> Icons.Rounded.School
     }
 
-/** The other two Obsi apps, each one tap away. A missing app opens its download page. */
+/** The other Obsi apps, each one tap away. A missing app opens its download page. */
 @Composable
 fun ObsiAppsRow(modifier: Modifier = Modifier) {
     val context = LocalContext.current

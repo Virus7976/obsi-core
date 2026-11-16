@@ -2,7 +2,7 @@ package app.obsi.core
 
 import android.content.Context
 
-/** The three Obsi apps. Each one is a separate app on the phone, with its own key and updates. */
+/** The Obsi apps. Each one is a separate app on the phone, with its own key and updates. */
 enum class ObsiApp(
     val title: String,
     val pkg: String,
@@ -15,7 +15,11 @@ enum class ObsiApp(
 ) {
     Tube("ObsiTube", "app.marginalia", "Virus7976/obsidian-web-clipper-YouTube-android-Private", "video", "videos", "YouTube videos"),
     Read("ObsiRead", "app.obsiread", "Virus7976/obsiread", "article", "articles", "Web pages"),
-    Bible("Obsi Bible", "app.obsibible", "Virus7976/obsi-bible", "passage", "passages", "The Bible");
+    Bible("Obsi Bible", "app.obsibible", "Virus7976/obsi-bible", "passage", "passages", "The Bible"),
+    Learn("ObsiLearn", "app.obsilearn", "Virus7976/Obsi-Learn", "lesson", "lessons", "Video courses");
+
+    /** Plays something with a timeline: a highlight has a time, not only a place on a page. */
+    val timed: Boolean get() = this == Tube || this == Learn
 
     val downloadPage: String get() = "https://github.com/$repo/releases/latest"
 
@@ -41,6 +45,7 @@ object Brand {
         return when {
             has("app.marginalia.MarginaliaApp") -> ObsiApp.Tube
             has("app.obsibible.ObsiBibleApp") -> ObsiApp.Bible
+            has("app.obsilearn.ObsiLearnApp") -> ObsiApp.Learn
             else -> ObsiApp.Read
         }
     }
@@ -56,6 +61,6 @@ object Brand {
     /** "1 video", "3 videos". */
     fun count(n: Int): String = if (n == 1) "1 $noun" else "$n $nouns"
 
-    /** The other two apps. */
+    /** The other apps. */
     val others: List<ObsiApp> get() = ObsiApp.entries.filter { it != app }
 }

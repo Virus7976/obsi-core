@@ -109,7 +109,13 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onEditTemplate: (String) -> Unit,
+    /** The app's own settings pages, shown first in the menu. */
+    appPages: List<SettingsEntry> = emptyList(),
+    onAppPage: (String) -> Unit = {},
+) {
     val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as ObsiHost
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -159,8 +165,9 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
         query.lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }.all { words.contains(it) }
     // a screen shows when it is open, or, while searching, when it matches
     fun show(id: String, words: String) = if (query.isBlank()) page == id else hit(words)
-    // The player, lock screen and caption settings are ObsiTube's alone.
-    val isTube = Brand.app == ObsiApp.Tube
+    // The player and lock screen are for the apps that play (ObsiTube, ObsiLearn). Caption client versions are ObsiTube's alone.
+    val isTube = Brand.app.timed
+    val isYouTube = Brand.app == ObsiApp.Tube
     val tubeOnly = setOf("playback", "lock", "advanced")
     val menu = listOf(
         SettingsEntry("look", "Look", "App icon, theme, home layout", Icons.Rounded.Palette),
@@ -172,7 +179,7 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
         SettingsEntry("lock", "Lock screen", "The player when the screen is off", Icons.Rounded.Lock),
         SettingsEntry("updates", "Updates", "Check for and install new versions", Icons.Rounded.SystemUpdate),
         SettingsEntry("advanced", "Advanced", "Caption client versions", Icons.Rounded.Tune),
-    ).filter { isTube || it.id !in tubeOnly }
+    ).filter { (isTube || it.id !in tubeOnly) && (isYouTube || it.id != "advanced") }
     val fontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             runCatching {
@@ -244,7 +251,7 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
                 )
                 if (query.isNotBlank() && !listOf(
                         SettingsKeys.look, SettingsKeys.reading, SettingsKeys.highlights, SettingsKeys.updates,
-                        SettingsKeys.obsidian, SettingsKeys.review, *(if (isTube) arrayOf(SettingsKeys.lock, SettingsKeys.playback, SettingsKeys.advanced) else emptyArray()),
+                        SettingsKeys.obsidian, SettingsKeys.review, *(if (isTube) arrayOf(SettingsKeys.lock, SettingsKeys.playback, *(if (isYouTube) arrayOf(SettingsKeys.advanced) else emptyArray())) else emptyArray()),
                     ).any { hit(it) }
                 ) {
                     Text("Nothing matches \"$query\"", Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -254,12 +261,12 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
             if (query.isBlank() && page == null) item("obsi-apps") { ObsiAppsSection() }
 
             // ---------- the menu ----------
-            if (query.isBlank() && page == null) menu.forEach { e ->
+            if (query.isBlank() && page == null) (appPages + menu).forEach { e ->
                 item(e.id) {
                     Row(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 3.dp).clip(RoundedCornerShape(22.dp))
                             .background(MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable { page = e.id }.padding(horizontal = 16.dp, vertical = 14.dp),
+                            .clickable { if (appPages.any { it.id == e.id }) onAppPage(e.id) else page = e.id }.padding(horizontal = 16.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
@@ -768,7 +775,7 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
             } }
 
             // ---------- advanced ----------
-            if (isTube && show("advanced", SettingsKeys.advanced)) item { Group("Advanced") {
+            if (isYouTube && show("advanced", SettingsKeys.advanced)) item { Group("Advanced") {
                 Text(
                     "ObsiTube reads captions the way YouTube's own phone apps do. If captions ever stop loading, a newer client version below usually fixes it.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -789,7 +796,8 @@ fun SettingsScreen(onBack: () -> Unit, onEditTemplate: (String) -> Unit) {
     }
 }
 
-private class SettingsEntry(val id: String, val title: String, val hint: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
+/** A row in the Settings menu. An app passes its own as [SettingsScreen]'s appPages; they open the app's own screen. */
+class SettingsEntry(val id: String, val title: String, val hint: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
 /** Every setting name in each section, so the search box can find a section by what is inside it. */
 private object SettingsKeys {

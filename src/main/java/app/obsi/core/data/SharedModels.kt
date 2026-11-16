@@ -174,7 +174,7 @@ data class AppSettings(
     val highlightColor: Int = 0, // the colour new highlights start with
     val holdSelects: String = "word", // word | sentence | paragraph
     val highlightSyntax: String = "obsidian", // obsidian | plain
-    val highlightFormat: String = if (app.obsi.core.Brand.app == app.obsi.core.ObsiApp.Tube) "> {text}\n> [{time}]({link})" else "> {text} [↗]({link})",
+    val highlightFormat: String = if (app.obsi.core.Brand.app.timed) "> {text}\n> [{time}]({link})" else "> {text} [↗]({link})",
     val autoPlay: Boolean = true,
     /** Save a video's highlights to Obsidian by itself when it ends. */
     val autoClip: Boolean = false,

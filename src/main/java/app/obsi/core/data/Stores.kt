@@ -136,7 +136,7 @@ class Playlists(context: Context) : JsonFileStore<List<Playlist>>(File(context.f
     /** The built in "Watch later" playlist. Made the first time it is used. Videos leave it when watched. */
     /** "Watch later" in ObsiTube, "Read later" in ObsiRead. A list saved under the other name is renamed. */
     fun watchLater(): Playlist {
-        val title = if (app.obsi.core.Brand.app == app.obsi.core.ObsiApp.Tube) "Watch later" else "Read later"
+        val title = if (app.obsi.core.Brand.app.timed) "Watch later" else "Read later"
         return get(WATCH_LATER)?.let { if (it.title != title && it.title in setOf("Watch later", "Read later")) it.copy(title = title).also { p -> put(p) } else it }
             ?: Playlist(WATCH_LATER, title, "", emptyList(), System.currentTimeMillis(), removeWhenWatched = true).also { put(it) }
     }

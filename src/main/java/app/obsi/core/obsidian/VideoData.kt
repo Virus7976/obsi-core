@@ -60,8 +60,18 @@ object VideoData {
         DataField("language", "Language", words),
     )
 
+    /** A lesson in ObsiLearn: the video fields, with the course and module in place of the channel. */
+    val lessonFields: List<DataField> by lazy {
+        listOf(DataField("course", "Course", words), DataField("module", "Module", words)) +
+            videoFields.filter { it.key != "videoId" }
+    }
+
     /** The data this app has. Obsi Bible has its own (BibleData). */
-    val fields: List<DataField> get() = if (Brand.app == ObsiApp.Tube) videoFields else articleFields
+    val fields: List<DataField> get() = when {
+        Brand.app == ObsiApp.Learn -> lessonFields
+        Brand.app.timed -> videoFields
+        else -> articleFields
+    }
 
     private val single = Regex("^\\{\\{\\s*([A-Za-z]+)\\s*(\\|[^{}]*)?\\}\\}$")
 

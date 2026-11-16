@@ -3,7 +3,7 @@
 
     <!--
     Each Obsi app guards its highlights with its own permission. Only apps signed with one of the
-    three Obsi keys get it (knownSigner, Android 12 and up). Each name is its own, because two apps
+    Obsi keys get it (knownSigner, Android 12 and up). Each name is its own, because two apps
     with different keys may not define the same permission.
     -->
     <permission
@@ -15,12 +15,14 @@
     <uses-permission android:name="app.marginalia.permission.OBSI_SHARE" />
     <uses-permission android:name="app.obsiread.permission.OBSI_SHARE" />
     <uses-permission android:name="app.obsibible.permission.OBSI_SHARE" />
+    <uses-permission android:name="app.obsilearn.permission.OBSI_SHARE" />
 
     <!-- Android 11 and up hides other apps unless they are named here. -->
     <queries>
         <package android:name="app.marginalia" />
         <package android:name="app.obsiread" />
         <package android:name="app.obsibible" />
+        <package android:name="app.obsilearn" />
     </queries>
 
     <application>

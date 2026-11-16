@@ -3,9 +3,10 @@ package app.obsi.core.ui
 import app.obsi.core.Brand
 import app.obsi.core.ObsiApp
 
-/** The tabs Home can show, by id. ObsiTube also has the channel feed. */
+/** The tabs Home can show, by id. ObsiTube also has the channel feed. ObsiLearn has courses. */
 val HomeTabs: Map<String, String>
-    get() = if (Brand.app == ObsiApp.Tube) linkedMapOf("library" to "Library", "feed" to "Feed", "queue" to "Queue")
+    get() = if (Brand.app == ObsiApp.Learn) linkedMapOf("library" to "Courses", "queue" to "Up next")
+    else if (Brand.app == ObsiApp.Tube) linkedMapOf("library" to "Library", "feed" to "Feed", "queue" to "Queue")
     else linkedMapOf("library" to "Library", "queue" to "Up next")
 
 val LibraryLayouts = listOf("list" to "List", "grid" to "Grid", "compact" to "Compact")
