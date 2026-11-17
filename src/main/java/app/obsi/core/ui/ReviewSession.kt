@@ -87,7 +87,17 @@ class ReviewEntry(
     val itemTitle: String,
     /** Where in it: a time like 3:12, or a place like "12% in". */
     val place: String,
-)
+    /** Set when the highlight is from another Obsi app. Keep and Drop then go back to that app. */
+    val from: SharedHighlight? = null,
+) {
+    companion object {
+        /** Another app's due highlight, as a card. */
+        fun of(h: SharedHighlight) = ReviewEntry(
+            Highlight(id = h.app.name + ":" + h.key, startSec = 0.0, endSec = 0.0, text = h.text, note = h.note, createdAt = h.created, tags = h.tags),
+            h.itemId, h.itemTitle, h.place, h,
+        )
+    }
+}
 
 /**
  * Review mode, the same in every Obsi app. One old highlight at a time. Swipe right or press Keep to see
@@ -110,7 +120,16 @@ fun ReviewSession(
 
     // 0 means no limit.
     val limit = batchSize.takeIf { it > 0 } ?: Int.MAX_VALUE
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // One review for every Obsi app: this app's highlights and the other apps' due ones, oldest first.
+    suspend fun everything(): List<ReviewEntry> {
+        val own = due()
+        val others = SharedReview.fromOthers(context).map { ReviewEntry.of(it) }
+        return (own + others).sortedBy { it.highlight.createdAt }
+    }
     var batch by remember { mutableStateOf(due().take(limit)) }
+    var loaded by remember { mutableStateOf(false) }
+    androidx.compose.runtime.LaunchedEffect(Unit) { batch = everything().take(limit); loaded = true }
     var last by remember { mutableStateOf<Undo?>(null) }
     androidx.compose.runtime.LaunchedEffect(last) { if (last != null) { kotlinx.coroutines.delay(6000); last = null } }
     var at by remember { mutableIntStateOf(0) }
@@ -124,9 +143,17 @@ fun ReviewSession(
         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.ContextClick)
         scope.launch {
             offset.animateTo(if (keep) width else -width)
-            val prev = cards.cards.value[item.highlight.id]
-            if (keep) { cards.keep(item.highlight.id); kept++ } else { cards.drop(item.highlight.id); dropped++ }
-            last = Undo(at, item.highlight.id, prev, if (keep) "Kept" else "Dropped")
+            val other = item.from
+            if (other != null) {
+                // Another app keeps this one's schedule. Undo cannot reach it, so none is offered.
+                SharedReview.act(context, other, if (keep) "keep" else "drop")
+                if (keep) kept++ else dropped++
+                last = null
+            } else {
+                val prev = cards.cards.value[item.highlight.id]
+                if (keep) { cards.keep(item.highlight.id); kept++ } else { cards.drop(item.highlight.id); dropped++ }
+                last = Undo(at, item.highlight.id, prev, if (keep) "Kept" else "Dropped")
+            }
             at++
             offset.snapTo(0f)
         }
@@ -151,16 +178,17 @@ fun ReviewSession(
         )
 
         if (item == null) {
-            Box(Modifier.weight(1f).fillMaxWidth()) { Done(
+            val more by androidx.compose.runtime.produceState(0, changes, at) { value = everything().size }
+            Box(Modifier.weight(1f).fillMaxWidth()) { if (loaded) Done(
                 kept = kept, dropped = dropped, hadAny = batch.isNotEmpty(),
-                more = remember(changes, at) { due().size },
+                more = more,
                 size = limit,
-                onMore = { batch = due().take(limit); at = 0; kept = 0; dropped = 0; last = null },
+                onMore = { scope.launch { batch = everything().take(limit); at = 0; kept = 0; dropped = 0; last = null } },
                 onBack = onBack,
             ) }
         } else {
             val h = item.highlight
-            val tone = HighlightColors.getOrNull(h.color)?.ui?.let { Color(it) } ?: scheme.primary
+            val tone = item.from?.let { Color(it.color) } ?: HighlightColors.getOrNull(h.color)?.ui?.let { Color(it) } ?: scheme.primary
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                 // A quiet cue behind the card: a check on the left for keep, a cross on the right for drop.
                 // It fades in as you drag and fills in when letting go would count.
@@ -214,8 +242,13 @@ fun ReviewSession(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(tone))
                             Spacer(Modifier.width(10.dp))
+                            // A highlight from another app says which one.
+                            item.from?.let { o ->
+                                Icon(o.app.icon, null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
+                                Spacer(Modifier.width(6.dp))
+                            }
                             Text(
-                                item.itemTitle, Modifier.weight(1f),
+                                listOfNotNull(item.from?.app?.title, item.itemTitle.takeIf { it.isNotBlank() }).distinct().joinToString(" · "), Modifier.weight(1f),
                                 style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             )
                         }
@@ -236,7 +269,7 @@ fun ReviewSession(
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(item.place, style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { onOpen(item) }) {
+                            TextButton(onClick = { item.from?.let { Links.openIn(context, it.app, it.itemId, it.at) } ?: onOpen(item) }) {
                                 Text("Open", color = scheme.onSurfaceVariant)
                                 Spacer(Modifier.width(6.dp))
                                 Icon(Icons.Rounded.OpenInNew, null, Modifier.size(16.dp), tint = scheme.onSurfaceVariant)
@@ -258,8 +291,9 @@ fun ReviewSession(
             }
             TextButton(
                 onClick = {
-                    last = Undo(at, h.id, cards.cards.value[h.id], "Skipped")
-                    cards.later(h.id)
+                    val other = item.from
+                    if (other != null) { scope.launch { SharedReview.act(context, other, "later") }; last = null }
+                    else { last = Undo(at, h.id, cards.cards.value[h.id], "Skipped"); cards.later(h.id) }
                     at++
                 },
                 modifier = Modifier.align(Alignment.CenterHorizontally),
@@ -324,7 +358,5 @@ private fun Done(kept: Int, dropped: Int, hadAny: Boolean, more: Int, size: Int,
         Spacer(Modifier.height(24.dp))
         if (more > 0) Button(onClick = onMore, shapes = ButtonDefaults.shapes()) { Text("Review ${if (size == Int.MAX_VALUE) "all $more" else minOf(more, size).toString() + " more"}") }
         TextButton(onClick = onBack) { Text("Done") }
-        Spacer(Modifier.height(24.dp))
-        OtherAppsReview()
     }
 }

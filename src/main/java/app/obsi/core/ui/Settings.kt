@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -177,6 +178,7 @@ fun SettingsScreen(
         SettingsEntry("review", "Review", "Come back to old highlights", androidx.compose.material.icons.Icons.Rounded.Notifications),
         SettingsEntry("playback", "Playback and captions", "Autoplay, background, muting", Icons.Rounded.PlayCircle),
         SettingsEntry("lock", "Lock screen", "The player when the screen is off", Icons.Rounded.Lock),
+        SettingsEntry("backup", "Backup", "Save every Obsi app to one file", androidx.compose.material.icons.Icons.Rounded.Backup),
         SettingsEntry("updates", "Updates", "Check for and install new versions", Icons.Rounded.SystemUpdate),
         SettingsEntry("advanced", "Advanced", "Caption client versions", Icons.Rounded.Tune),
     ).filter { (isTube || it.id !in tubeOnly) && (isYouTube || it.id != "advanced") }
@@ -420,6 +422,7 @@ fun SettingsScreen(
                 )
             } }
 
+            if (show("backup", "backup restore save file new phone export import move")) item { Group("Backup") { BackupPanel() } }
             if (show("updates", SettingsKeys.updates)) item { UpdateGroup(s, ::set) }
 
             // ---------- obsidian ----------

@@ -87,7 +87,8 @@ class SharedHighlightsProvider : ContentProvider() {
         if (uri.lastPathSegment == "setup") return SharedSetup.cursor()
         if (uri.lastPathSegment == "style") return SharedStyle.cursor()
         if (uri.lastPathSegment == "activity") return context?.let { app.obsi.core.data.SharedActivity.cursor(it) }
-        if (uri.lastPathSegment == "due") return SharedHighlights.cursor(runCatching { SharedReview.due?.invoke() }.getOrNull().orEmpty())
+        if (uri.lastPathSegment == "search") return SharedSearch.cursor(selectionArgs?.firstOrNull().orEmpty())
+        if (uri.lastPathSegment == "due")return SharedHighlights.cursor(runCatching { SharedReview.due?.invoke() }.getOrNull().orEmpty())
         if (uri.lastPathSegment != "highlights") return null
         val rows = runCatching { SharedHighlights.source?.invoke() }.getOrNull().orEmpty()
         return SharedHighlights.cursor(rows)
@@ -100,6 +101,14 @@ class SharedHighlightsProvider : ContentProvider() {
         ctx.enforceCallingPermission(ctx.packageName + ".permission.OBSI_SHARE", "Only the Obsi apps may do this.")
         if (method == "review" && arg != null) SharedReview.act?.invoke(arg, extras?.getString("action") ?: "later")
         return null
+    }
+
+    /** "backup" and "restore": another Obsi app saves or puts back this app's part of a backup. */
+    override fun openFile(uri: Uri, mode: String): android.os.ParcelFileDescriptor? {
+        val ctx = context ?: return null
+        // A file is not covered by the read permission alone, so check it here, for reading and writing.
+        ctx.enforceCallingPermission(ctx.packageName + ".permission.OBSI_SHARE", "Only the Obsi apps may do this.")
+        return SharedBackup.open(ctx, uri.lastPathSegment.orEmpty(), mode)
     }
 
     override fun getType(uri: Uri): String = "vnd.android.cursor.dir/vnd.obsi.highlight"

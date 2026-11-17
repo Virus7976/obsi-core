@@ -24,6 +24,10 @@ data class DayActivity(
     val sec: Int = 0,
     /** Videos, articles, lessons or chapters finished. */
     val finished: Int = 0,
+    /** Seconds by hour of the day, "0" to "23". */
+    val hours: Map<String, Int> = emptyMap(),
+    /** Seconds by what was watched or read, by its title. The 40 biggest of the day are kept. */
+    val items: Map<String, Int> = emptyMap(),
 )
 
 @Serializable
@@ -37,7 +41,14 @@ class ActivityLog(context: Context) : JsonFileStore<ActivityData>(File(context.f
     private val _state = MutableStateFlow(readOrNull() ?: ActivityData())
     val state: StateFlow<ActivityData> = _state.asStateFlow()
 
-    fun addTime(sec: Int) = change { it.copy(sec = it.sec + sec) }
+    /** Adds time spent now, on [item] (a title) when known. */
+    fun addTime(sec: Int, item: String = "") = change { d ->
+        val h = java.time.LocalTime.now().hour.toString()
+        val items = if (item.isBlank()) d.items else (d.items + (item to (d.items[item] ?: 0) + sec)).let { m ->
+            if (m.size <= 40) m else m.entries.sortedByDescending { it.value }.take(40).associate { it.key to it.value }
+        }
+        d.copy(sec = d.sec + sec, hours = d.hours + (h to (d.hours[h] ?: 0) + sec), items = items)
+    }
     fun finished() = change { it.copy(finished = it.finished + 1) }
 
     private fun change(block: (DayActivity) -> DayActivity) {
@@ -70,6 +81,9 @@ data class Stats(
 }
 
 data class AppTotals(val sec: Int, val finished: Int, val highlights: Int)
+
+/** Everything the stats page shows, before a range or apps are picked. */
+data class StatsData(val days: Map<ObsiApp, Map<String, DayActivity>>, val highlights: List<SharedHighlight>)
 
 object Activity {
     @Volatile
@@ -127,6 +141,15 @@ object Activity {
         )
     }
 
+    /** Every app's days and every highlight, for the full stats page. */
+    suspend fun raw(context: Context): StatsData = withContext(Dispatchers.IO) {
+        val days = HashMap<ObsiApp, Map<String, DayActivity>>()
+        days[Brand.app] = log(context).state.value.days
+        Brand.others.filter { it.installed(context) }.forEach { other -> days[other] = SharedActivity.read(context, other) }
+        val own = runCatching { SharedHighlights.source?.invoke() }.getOrNull().orEmpty().map { it.copy(app = Brand.app) }
+        StatsData(days, (own + SharedHighlights.fromOthers(context)).filter { it.text.isNotBlank() || it.note.isNotBlank() })
+    }
+
     /** Reads this app and every other Obsi app on the phone. An app that is missing or old adds nothing. */
     suspend fun load(context: Context): Stats = withContext(Dispatchers.IO) {
         val days = HashMap<ObsiApp, Map<String, DayActivity>>()
@@ -141,7 +164,8 @@ object Activity {
     fun duration(sec: Int): String {
         val m = sec / 60
         return when {
-            m < 1 -> "0m"
+            sec <= 0 -> "0m"
+            m < 1 -> "<1m"
             m < 60 -> "${m}m"
             else -> "${m / 60}h ${(m % 60).toString().padStart(2, '0')}m"
         }
@@ -150,12 +174,12 @@ object Activity {
 
 /** Reads another Obsi app's days through its share door. */
 object SharedActivity {
-    private val columns = arrayOf("day", "sec", "finished")
+    private val columns = arrayOf("day", "sec", "finished", "json")
 
     internal fun cursor(context: Context): android.database.Cursor {
         val days = Activity.log(context).state.value.days
         return android.database.MatrixCursor(columns, days.size).apply {
-            days.forEach { (k, d) -> addRow(arrayOf<Any>(k, d.sec, d.finished)) }
+            days.forEach { (k, d) -> addRow(arrayOf<Any>(k, d.sec, d.finished, storeJson.encodeToString(DayActivity.serializer(), d))) }
         }
     }
 
@@ -163,9 +187,12 @@ object SharedActivity {
         val uri = android.net.Uri.parse("content://${SharedHighlights.authority(from)}/activity")
         context.contentResolver.query(uri, null, null, null, null)?.use { c ->
             val out = HashMap<String, DayActivity>(c.count)
+            val json = c.getColumnIndex("json")
             while (c.moveToNext()) {
+                // An app from before hours and items were kept sends only the totals.
                 out[c.getString(c.getColumnIndexOrThrow("day"))] =
-                    DayActivity(c.getInt(c.getColumnIndexOrThrow("sec")), c.getInt(c.getColumnIndexOrThrow("finished")))
+                    (if (json >= 0) runCatching { storeJson.decodeFromString(DayActivity.serializer(), c.getString(json)) }.getOrNull() else null)
+                        ?: DayActivity(c.getInt(c.getColumnIndexOrThrow("sec")), c.getInt(c.getColumnIndexOrThrow("finished")))
             }
             out
         }.orEmpty()

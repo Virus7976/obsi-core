@@ -70,6 +70,28 @@ object Transcripts {
     private val blank = Regex("""\n\s*\n""")
 
     /**
+     * Reads a transcript in any form a podcast or a course gives: .srt, .vtt, or the Podcasting 2.0 JSON
+     * form ({"segments":[{"startTime","endTime","body"}]}).
+     */
+    fun parseAny(text: String, lang: String = ""): TranscriptData {
+        val t = text.trimStart()
+        if (t.startsWith("{")) runCatching {
+            val o = kotlinx.serialization.json.Json.parseToJsonElement(t) as kotlinx.serialization.json.JsonObject
+            val segs = (o["segments"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            fun kotlinx.serialization.json.JsonElement.num(k: String) =
+                ((this as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
+            fun kotlinx.serialization.json.JsonElement.str(k: String) =
+                ((this as? kotlinx.serialization.json.JsonObject)?.get(k) as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+            val cues = segs.mapNotNull { s ->
+                val body = s.str("body").trim()
+                if (body.isEmpty()) null else Cue(s.num("startTime"), (s.num("endTime") - s.num("startTime")).coerceAtLeast(0.2), body)
+            }
+            if (cues.isNotEmpty()) return TranscriptData(lang = lang, cues = cues)
+        }
+        return parseSubtitles(text, lang)
+    }
+
+    /**
      * Reads an .srt or .vtt file. Tags like <i> and cue settings are dropped. Rolling captions,
      * where each cue repeats the one before, keep only the new words.
      */

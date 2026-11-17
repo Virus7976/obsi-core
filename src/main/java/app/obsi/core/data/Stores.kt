@@ -96,7 +96,9 @@ class SettingsStore(context: Context) : JsonFileStore<AppSettings>(File(context.
         // so an app that still has the default look takes it.
         if (s.styleAt == 0L && !app.obsi.core.share.ObsiStyle.of(s).sameLook(app.obsi.core.share.ObsiStyle.of(AppSettings())))
             s = s.copy(styleAt = savedAt.coerceAtLeast(1L))
-        return s.copy(tabsVersion = 5)
+        // ObsiLearn has a Podcasts tab now. It shows once; turn it off in Settings › Look like any tab.
+        if (s.tabsVersion < 6 && app.obsi.core.Brand.app == app.obsi.core.ObsiApp.Learn && "podcasts" !in s.homeTabs) s = s.copy(homeTabs = s.homeTabs + "podcasts")
+        return s.copy(tabsVersion = 6)
     }
 
     override fun encode(value: AppSettings) = storeJson.encodeToString(AppSettings.serializer(), value)

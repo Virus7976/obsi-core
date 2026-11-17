@@ -112,3 +112,11 @@ fun AllAppsReview(modifier: Modifier = Modifier) {
     val items by produceState(emptyList<SharedHighlight>(), Unit) { value = SharedReview.own() + SharedReview.fromOthers(context) }
     ReviewDeck(items, "Review", modifier)
 }
+
+/** How many highlights the other Obsi apps have due. Add it to this app's own count, since Review shows them all. */
+@Composable
+fun rememberOthersDue(): Int {
+    val context = LocalContext.current
+    val n by produceState(0, Unit) { value = SharedReview.fromOthers(context).size }
+    return n
+}
