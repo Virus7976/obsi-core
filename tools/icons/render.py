@@ -27,11 +27,12 @@ MONO = {
     "bible": "M-8,-9.5H6Q8,-9.5 8,-7.5V9.5H-6Q-8,9.5 -8,7.5Z M-0.8,-6.8V5.8H0.8V-6.8Z M-4.6,-3V-1.4H4.6V-3Z",
     "learn": "M0,-8.5L11.5,-2.8L0,3L-11.5,-2.8Z M-6.8,0.6V5.6Q0,10.4 6.8,5.6V0.6L0,4Z M8.7,-1.8H10.3V6.2H8.7Z M11.3,7.3A1.8,1.8 0 1 1 7.7,7.3A1.8,1.8 0 1 1 11.3,7.3Z",
 }
+TINTS = ["amethyst", "ruby", "sapphire", "emerald", "amber"]
 OFFSET = {"tube": (-1.2, 0), "read": (0, 0), "bible": (0, 0), "learn": (0, -1)}
 
 
-def shot(app, mode, size, out):
-    url = "file:///" + os.path.join(HERE, "icon.html").replace("\\", "/") + f"?app={app}&mode={mode}&px={size}"
+def shot(app, mode, size, out, tint="amethyst"):
+    url = "file:///" + os.path.join(HERE, "icon.html").replace("\\", "/") + f"?app={app}&mode={mode}&px={size}&tint={tint}"
     subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1", "--default-background-color=00000000",
                     f"--window-size={size + 64},{size + 240}", "--virtual-time-budget=1500", f"--screenshot={out}", url],
                    check=True, capture_output=True)
@@ -52,18 +53,29 @@ def main():
     app, res = sys.argv[1], sys.argv[2]
     preview = sys.argv[sys.argv.index("--preview") + 1] if "--preview" in sys.argv else None
     tmp = tempfile.mkdtemp()
-    fg = shot(app, "fg", 864, os.path.join(tmp, "fg.png"))
-    for name, px in DENSITIES.items():
-        d = os.path.join(res, f"mipmap-{name}")
-        os.makedirs(d, exist_ok=True)
-        fg.resize((px, px), Image.LANCZOS).save(os.path.join(d, "ic_obsi_glass_fg.png"), optimize=True)
-
-    tile = shot(app, "tile", 512, os.path.join(tmp, "tile.png"))
-    nodpi = os.path.join(res, "drawable-nodpi")
-    os.makedirs(nodpi, exist_ok=True)
-    tile.resize((192, 192), Image.LANCZOS).save(os.path.join(nodpi, "ic_obsi_glass_preview.png"), optimize=True)
-    if preview:
-        tile.save(preview, optimize=True)
+    bgs = {}
+    for tint in TINTS:
+        name = "glass" if tint == "amethyst" else tint
+        fg = shot(app, "fg", 864, os.path.join(tmp, f"fg_{tint}.png"), tint)
+        bgs[name] = fg.getpixel((0, 432))
+        for dens, px in DENSITIES.items():
+            d = os.path.join(res, f"mipmap-{dens}")
+            os.makedirs(d, exist_ok=True)
+            fg.resize((px, px), Image.LANCZOS).save(os.path.join(d, f"ic_obsi_{name}_fg.png"), optimize=True)
+        tile = shot(app, "tile", 512, os.path.join(tmp, f"tile_{tint}.png"), tint)
+        nodpi = os.path.join(res, "drawable-nodpi")
+        os.makedirs(nodpi, exist_ok=True)
+        tile.resize((192, 192), Image.LANCZOS).save(os.path.join(nodpi, f"ic_obsi_{name}_preview.png"), optimize=True)
+        if preview and tint == "amethyst":
+            tile.save(preview, optimize=True)
+        write(os.path.join(res, "mipmap-anydpi-v26", f"ic_obsi_{name}.xml"), f"""<?xml version="1.0" encoding="utf-8"?>
+<!-- Made by obsi-core/tools/icons/render.py. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/obsi_{name}_bg" />
+    <foreground android:drawable="@mipmap/ic_obsi_{name}_fg" />
+    <monochrome android:drawable="@drawable/ic_obsi_glass_mono" />
+</adaptive-icon>
+""")
 
     dx, dy = OFFSET[app]
     s = 2.0
@@ -76,18 +88,11 @@ def main():
     </group>
 </vector>
 """)
-    write(os.path.join(res, "mipmap-anydpi-v26", "ic_obsi_glass.xml"), """<?xml version="1.0" encoding="utf-8"?>
-<!-- Made by obsi-core/tools/icons/render.py. -->
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/obsi_glass_bg" />
-    <foreground android:drawable="@mipmap/ic_obsi_glass_fg" />
-    <monochrome android:drawable="@drawable/ic_obsi_glass_mono" />
-</adaptive-icon>
-""")
-    write(os.path.join(res, "values", "obsi_glass.xml"), """<?xml version="1.0" encoding="utf-8"?>
-<!-- Made by obsi-core/tools/icons/render.py. Under the foreground, which covers it. -->
+    colors = "\n".join(f'    <color name="obsi_{n}_bg">#FF{r:02X}{g:02X}{b:02X}</color>' for n, (r, g, b, _) in bgs.items())
+    write(os.path.join(res, "values", "obsi_glass.xml"), f"""<?xml version="1.0" encoding="utf-8"?>
+<!-- Made by obsi-core/tools/icons/render.py. Under each foreground, which covers it. -->
 <resources>
-    <color name="obsi_glass_bg">#FF140A2E</color>
+{colors}
 </resources>
 """)
     print(app, "icon written to", res)

@@ -39,6 +39,19 @@ object SharedSetup {
         }
     }
 
+    /**
+     * Other Obsi apps that are on the phone but will not share with this one. Android decides this when an
+     * app is installed: an app put on before the others knew it stays locked out until it is installed again.
+     */
+    suspend fun lockedOut(context: Context): List<ObsiApp> = withContext(Dispatchers.IO) {
+        Brand.others.filter { it.installed(context) }.filter { other ->
+            try {
+                context.contentResolver.query(Uri.parse("content://${SharedHighlights.authority(other)}/setup"), null, null, null, null)?.close()
+                false
+            } catch (_: SecurityException) { true } catch (_: Exception) { false }
+        }
+    }
+
     /** The setups of the other Obsi apps that have a vault folder. */
     suspend fun fromOthers(context: Context): List<ObsiSetup> = withContext(Dispatchers.IO) {
         Brand.others.filter { it.installed(context) }.mapNotNull { other -> read(context, other) }

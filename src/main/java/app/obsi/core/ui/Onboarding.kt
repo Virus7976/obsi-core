@@ -87,7 +87,13 @@ fun OnboardingScreen(pitch: String, steps: List<OnboardingStep>, onDone: () -> U
     val settings by host.settings.state.collectAsState()
     var others by remember { mutableStateOf(emptyList<ObsiSetup>()) }
     val installed = remember { Brand.others.filter { it.installed(context) } }
-    LaunchedEffect(Unit) { others = SharedSetup.fromOthers(context) }
+    var locked by remember { mutableStateOf(emptyList<app.obsi.core.ObsiApp>()) }
+    LaunchedEffect(Unit) {
+        others = SharedSetup.fromOthers(context)
+        locked = SharedSetup.lockedOut(context)
+        // Take the look you already chose in another Obsi app, before you see a single page.
+        app.obsi.core.share.SharedStyle.pull(context, host.settings)
+    }
 
     val titles = listOf("Welcome", "Your vault") + steps.map { it.title } + "Ready"
     var page by remember { mutableIntStateOf(0) }
@@ -113,7 +119,7 @@ fun OnboardingScreen(pitch: String, steps: List<OnboardingStep>, onDone: () -> U
                 Spacer(Modifier.height(12.dp))
                 when (p) {
                     0 -> Welcome(pitch, installed.map { it.title })
-                    1 -> VaultStep(settings, others)
+                    1 -> VaultStep(settings, others, locked)
                     last -> {
                         Text("You are set", style = MaterialTheme.typography.headlineMedium)
                         Text("Everything here is in Settings too, so you can change it later.", style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant)
@@ -154,7 +160,7 @@ private fun Welcome(pitch: String, others: List<String>) {
 }
 
 @Composable
-private fun VaultStep(settings: AppSettings, others: List<ObsiSetup>) {
+private fun VaultStep(settings: AppSettings, others: List<ObsiSetup>, locked: List<app.obsi.core.ObsiApp> = emptyList()) {
     val context = LocalContext.current
     val host = context.applicationContext as ObsiHost
     val scheme = MaterialTheme.colorScheme
@@ -186,6 +192,18 @@ private fun VaultStep(settings: AppSettings, others: List<ObsiSetup>) {
         }
         TextButton(onClick = { from = null; picker.launch(null) }) { Text("Pick a different folder") }
         return
+    }
+    if (others.isEmpty() && locked.isNotEmpty()) {
+        Surface(shape = RoundedCornerShape(16.dp), color = scheme.errorContainer, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("${locked.joinToString(" and ") { it.title }} cannot share yet", style = MaterialTheme.typography.titleSmall, color = scheme.onErrorContainer)
+                Text(
+                    "${Brand.name} was put on this phone before ${if (locked.size > 1) "they were" else "it was"} updated, so Android keeps them apart. " +
+                        "Install ${Brand.name} again (its newest version), and your vault, look and highlights carry over.",
+                    style = MaterialTheme.typography.bodyMedium, color = scheme.onErrorContainer,
+                )
+            }
+        }
     }
     others.firstOrNull()?.let { o ->
         Button(onClick = { from = o; picker.launch(android.net.Uri.parse(o.folder)) }, modifier = Modifier.fillMaxWidth()) {

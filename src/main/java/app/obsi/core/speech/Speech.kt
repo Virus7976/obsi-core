@@ -1,5 +1,7 @@
 package app.obsi.core.speech
 
+import app.obsi.core.data.HttpWords
+
 import android.content.Context
 import android.net.Uri
 import app.obsi.core.data.Cue
@@ -104,7 +106,7 @@ class Cloud(
         val text = http.newCall(req).execute().use { r ->
             val body = r.body?.string().orEmpty()
             if (r.code == 401) error("The service did not take your key.")
-            if (!r.isSuccessful) error("The service said ${r.code}: " + body.take(160))
+            if (!r.isSuccessful) error(HttpWords.say(r.code, "The speech service"))
             body
         }
         return parse(text)

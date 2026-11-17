@@ -67,13 +67,13 @@ object StoreFiles {
 }
 
 class SettingsStore(context: Context) : JsonFileStore<AppSettings>(File(context.filesDir, "settings.json")) {
-    private val _state = MutableStateFlow(migrate(readOrNull() ?: AppSettings()))
+    private val _state = MutableStateFlow(migrate(readOrNull() ?: AppSettings(), File(context.filesDir, "settings.json").lastModified()))
     val state: StateFlow<AppSettings> = _state.asStateFlow()
     val value: AppSettings get() = _state.value
 
     val isFirstRun: Boolean = readOrNull() == null
 
-    private fun migrate(s0: AppSettings): AppSettings {
+    private fun migrate(s0: AppSettings, savedAt: Long): AppSettings {
         var s = s0
         if (s.tabsVersion < 1) {
             s = s.copy(
@@ -90,13 +90,30 @@ class SettingsStore(context: Context) : JsonFileStore<AppSettings>(File(context.
         if (s.tabsVersion < 3) s = s.copy(lockStyle = "page", lockBackground = "black")
         // Adding a video is a pop-up now, and playlists live inside the library.
         if (s.tabsVersion < 4) s = s.copy(homeTabs = listOf("library", "feed", "queue"))
-        return s.copy(tabsVersion = 4)
+        // Purple is the Obsi look now. Ink was only ever the default, so it moves over once.
+        if (s.tabsVersion < 5 && s.themePreset == "ink" && s.styleAt == 0L) s = s.copy(themePreset = "obsidian")
+        // A look picked before looks were shared has no stamp. It counts from when it was saved,
+        // so an app that still has the default look takes it.
+        if (s.styleAt == 0L && !app.obsi.core.share.ObsiStyle.of(s).sameLook(app.obsi.core.share.ObsiStyle.of(AppSettings())))
+            s = s.copy(styleAt = savedAt.coerceAtLeast(1L))
+        return s.copy(tabsVersion = 5)
     }
 
     override fun encode(value: AppSettings) = storeJson.encodeToString(AppSettings.serializer(), value)
     override fun decode(text: String) = storeJson.decodeFromString(AppSettings.serializer(), text)
 
+    /** A change made here. A new look is stamped, so the other Obsi apps take it too. */
     fun update(block: (AppSettings) -> AppSettings) {
+        _state.update { old ->
+            val new = block(old)
+            if (app.obsi.core.share.ObsiStyle.of(old).sameLook(app.obsi.core.share.ObsiStyle.of(new))) new
+            else new.copy(styleAt = System.currentTimeMillis())
+        }
+        persist(_state.value)
+    }
+
+    /** A look taken from another Obsi app. It keeps that app's stamp, so it is not sent back as new. */
+    fun syncStyle(block: (AppSettings) -> AppSettings) {
         _state.update(block)
         persist(_state.value)
     }

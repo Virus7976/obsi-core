@@ -303,7 +303,7 @@ fun SettingsScreen(
                         }
                         if (s.customPalettes.any { it.id == s.themePreset }) {
                             TextButton(onClick = {
-                                set { st -> st.copy(customPalettes = st.customPalettes.filterNot { it.id == st.themePreset }, themePreset = "ink") }
+                                set { st -> st.copy(customPalettes = st.customPalettes.filterNot { it.id == st.themePreset }, themePreset = "obsidian") }
                             }) { Text("Delete this palette") }
                         }
                     }

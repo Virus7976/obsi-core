@@ -114,7 +114,10 @@ data class CustomPalette(val id: String, val name: String, val seed: Long, val s
 @Serializable
 data class AppSettings(
     // look
-    val themePreset: String = "ink",
+    /** Purple, like Obsidian itself, so every Obsi app starts matching its icon and your vault. */
+    val themePreset: String = "obsidian",
+    /** When the look was last changed by hand, in this app or another Obsi app. The newest look wins. */
+    val styleAt: Long = 0L,
     val customPalettes: List<CustomPalette> = emptyList(),
     /** Home tabs that are shown: add, library. */    val homeTabs: List<String> = listOf("add", "library", "playlists", "queue"),
     val libraryLayout: String = "list", // list | grid | compact

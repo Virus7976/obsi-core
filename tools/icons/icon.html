@@ -20,6 +20,9 @@ const G = {
   learn:{d:'M0,-8.5L11.5,-2.8L0,3L-11.5,-2.8Z M-6.8,0.6V5.6Q0,10.4 6.8,5.6V0.6L0,4Z', dx:0, dy:-1, cut:'', tassel:true},
 };
 const g = G[app];
+// Colour versions: the same glass turned round the colour wheel. Amethyst is the original.
+const HUE = {amethyst:0, ruby:88, sapphire:-48, emerald:-112, amber:138};
+const hue = HUE[q.get('tint') || 'amethyst'] || 0;
 // The launcher shows about the middle 72 of the 108 units, so the mark is sized to that.
 const s = mode === 'fg' ? 2.0 : 2.7, k = s / 2.7;
 const cx = 54, cy = mode === 'fg' ? 54 : 52;
@@ -31,9 +34,9 @@ const fan = [[0,-36,-36,-14],[-36,-14,-36,18],[-36,18,0,40]].map(([a,b,c,d],i) =
 const seams = `M${cx},${cy-36*k}L${cx},${cy+40*k} M${cx-36*k},${cy-14*k}L${cx},${cy} M${cx-36*k},${cy+18*k}L${cx},${cy}`;
 const round = mode === 'tile';
 
-document.getElementById('out').innerHTML = `<svg viewBox="0 0 108 108" width="${px}" height="${px}" xmlns="http://www.w3.org/2000/svg"><defs>
+document.getElementById('out').innerHTML = `<svg viewBox="0 0 108 108" width="${px}" height="${px}" xmlns="http://www.w3.org/2000/svg" style="${hue ? `filter:hue-rotate(${hue}deg) saturate(1.15)` : ''}"><defs>
   <clipPath id="t"><rect width="108" height="108" rx="${round ? 27 : 0}"/></clipPath>
-  <radialGradient id="bg" cx=".5" cy=".42" r=".75"><stop offset="0" stop-color="#2a1560"/><stop offset=".6" stop-color="#140a2e"/><stop offset="1" stop-color="#08050f"/></radialGradient>
+  <radialGradient id="bg" cx=".5" cy=".42" r=".75"><stop offset="0" stop-color="#2a1560"/><stop offset=".7" stop-color="#1a0d3c"/><stop offset="1" stop-color="#160b33"/></radialGradient>
   <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".2"/><stop offset=".3" stop-color="#fff" stop-opacity="0"/></linearGradient>
   <linearGradient id="v0" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#efe6ff"/><stop offset="1" stop-color="#a586ff"/></linearGradient>
   <linearGradient id="v1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9c6cff"/><stop offset="1" stop-color="#5a24d6"/></linearGradient>
@@ -53,7 +56,6 @@ document.getElementById('out').innerHTML = `<svg viewBox="0 0 108 108" width="${
   </g>
   <g transform="${m}" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width=".45">${shape.replace(/stroke-width="[^"]+"/g,'')}</g>
   ${g.cut ? `<path d="${g.cut}" transform="${m}" stroke="#2a0c6e" stroke-opacity=".85" stroke-width="1.6" stroke-linecap="round" fill="none"/>` : ''}
-  <rect width="108" height="108" fill="url(#sheen)"/>
   ${round ? '<rect x=".5" y=".5" width="107" height="107" rx="26.5" fill="none" stroke="#fff" stroke-opacity=".08"/>' : ''}
 </g></svg>`;
 </script></body></html>

@@ -2,6 +2,7 @@
 
 package app.obsi.core.ui
 
+import kotlinx.coroutines.launch
 import app.obsi.core.*
 import app.obsi.core.data.*
 import app.obsi.core.obsidian.*
@@ -51,6 +52,7 @@ data class Palette(
 )
 
 val Palettes = listOf(
+    Palette("obsidian", "Obsidian", "Night grey, violet, like Obsidian", Color(0xFFA88BFA), Color(0xFF7F5AF0), Color(0xFF1B1A1F), Color(0xFFE4E1EC), Color(0xFFF8F7FB), Color(0xFF1D1B24)),
     Palette("ink", "Ink", "Charcoal, paper text, vermilion mark", Color(0xFFFF6A47), Color(0xFFC8381B), Color(0xFF151413), Color(0xFFECE7DF), Color(0xFFF6F2EA), Color(0xFF1C1917)),
     Palette("paper", "Paper", "Warm book page, red pencil", Color(0xFFE8704F), Color(0xFFB83A1E), Color(0xFF1B1713), Color(0xFFEFE6D8), Color(0xFFF1E9DA), Color(0xFF241E17)),
     Palette("moss", "Moss", "Forest black, cream, lime marker", Color(0xFFB9D84A), Color(0xFF5F7A12), Color(0xFF0F1511), Color(0xFFE3EBDA), Color(0xFFEEF2E4), Color(0xFF16201A)),
@@ -277,6 +279,18 @@ val LocalSettings = staticCompositionLocalOf { AppSettings() }
 
 @Composable
 fun MarginaliaTheme(settings: AppSettings, content: @Composable () -> Unit) {
+    // Each time the app comes to the front, it takes a look changed in another Obsi app.
+    val appCtx = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val host = appCtx as? app.obsi.core.ObsiHost
+        val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main)
+        val o = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && host != null) scope.launch { app.obsi.core.share.SharedStyle.pull(appCtx, host.settings) }
+        }
+        owner.lifecycle.addObserver(o)
+        onDispose { owner.lifecycle.removeObserver(o); scope.coroutineContext[kotlinx.coroutines.Job]?.cancel() }
+    }
     val systemDark = isSystemInDarkTheme()
     val mode = when (settings.appearance) {
         "light", "dusk", "dark", "oled" -> settings.appearance
