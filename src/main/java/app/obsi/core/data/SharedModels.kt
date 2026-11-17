@@ -199,6 +199,8 @@ data class AppSettings(
     val vaultFolderUri: String = "",
     /** Vault name -> folder the user picked, so the app can read tags, folders and notes. */
     val vaultFolders: Map<String, String> = emptyMap(),
+    /** True once the first-run walk-through was finished or skipped. */
+    val onboarded: Boolean = false,
     val recentTags: List<String> = emptyList(),
     /** Added to every clip, whatever the template says. */
     val autoTags: List<String> = emptyList(),
