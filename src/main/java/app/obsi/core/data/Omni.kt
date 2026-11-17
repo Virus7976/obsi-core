@@ -40,10 +40,26 @@ object Omni {
             val score = 100.0 + p.length * 8 + (if (sub == 0) 40 else 0) + (if (atWordStart) 25 else 0) - sub * 0.15
             return Fuzzy(score, (sub until sub + p.length).toList())
         }
+        // The first letter can be in many places ("s" in "Marcus" and in "Stoic"). Try each, keep the best.
+        var best: Fuzzy? = null
+        var tries = 0
+        for (start in t.indices) {
+            if (t[start] != p[0]) continue
+            if (++tries > 24) break
+            val f = fuzzyFrom(text, t, p, start) ?: continue
+            if (best == null || f.score > best.score) best = f
+        }
+        return best
+    }
+
+    private fun fuzzyFrom(text: String, t: String, p: String, from: Int): Fuzzy? {
         val at = ArrayList<Int>(p.length)
-        var ti = 0
+        var ti = from
         var score = 0.0
         var prev = -2
+        // A jump to the middle of a later word. A few are fine close together ("lonly" in "lonely");
+        // spread over a long title they match almost anything ("lonly" in "Long-Distance Relationships ... Manduley").
+        var midJumps = 0
         for (ch in p) {
             var found = -1
             while (ti < t.length) {
@@ -59,10 +75,14 @@ object Omni {
             score += 8.0
             if (found == prev + 1) score += 14.0
             if (boundary) score += 18.0
+            // A first letter in the middle of a word counts too ("i" of "Microplastics" for "iheart").
+            if (found != prev + 1 && !boundary) midJumps++
             score -= min(found - (if (prev >= 0) prev else 0), 6) * 0.8
             at += found
             prev = found
         }
+        val span = at.last() - at.first() + 1
+        if (midJumps > 0 && span > p.length + 3) return null
         return Fuzzy(score, at)
     }
 
