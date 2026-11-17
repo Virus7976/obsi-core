@@ -41,7 +41,8 @@ class StatsTest {
     }
 
     @Test fun durations() {
-        assertEquals("0m", Activity.duration(30))
+        assertEquals("0m", Activity.duration(0))
+        assertEquals("<1m", Activity.duration(30))
         assertEquals("12m", Activity.duration(720))
         assertEquals("2h 05m", Activity.duration(7500))
     }
