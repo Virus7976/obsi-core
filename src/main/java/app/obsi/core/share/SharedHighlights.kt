@@ -85,6 +85,7 @@ class SharedHighlightsProvider : ContentProvider() {
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? {
         if (uri.lastPathSegment == "setup") return SharedSetup.cursor()
+        if (uri.lastPathSegment == "ai") return context?.let { app.obsi.core.ai.Ai.cursor(it) }
         if (uri.lastPathSegment == "style") return SharedStyle.cursor()
         if (uri.lastPathSegment == "activity") return context?.let { app.obsi.core.data.SharedActivity.cursor(it) }
         if (uri.lastPathSegment == "search") return SharedSearch.cursor(selectionArgs?.firstOrNull().orEmpty())

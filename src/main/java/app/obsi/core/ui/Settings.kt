@@ -1,5 +1,7 @@
 package app.obsi.core.ui
 
+import androidx.compose.material.icons.rounded.NewReleases
+import androidx.compose.material.icons.rounded.Key
 import app.obsi.core.*
 import app.obsi.core.data.*
 import app.obsi.core.obsidian.*
@@ -179,7 +181,9 @@ fun SettingsScreen(
         SettingsEntry("playback", "Playback and captions", "Autoplay, background, muting", Icons.Rounded.PlayCircle),
         SettingsEntry("lock", "Lock screen", "The player when the screen is off", Icons.Rounded.Lock),
         SettingsEntry("backup", "Backup", "Save every Obsi app to one file", androidx.compose.material.icons.Icons.Rounded.Backup),
+        SettingsEntry("ai", "AI service", "Optional. Your own key for answers and summaries", Icons.Rounded.Key),
         SettingsEntry("updates", "Updates", "Check for and install new versions", Icons.Rounded.SystemUpdate),
+        SettingsEntry("whatsnew", "What's new", "What changed in each version", Icons.Rounded.NewReleases),
         SettingsEntry("advanced", "Advanced", "Caption client versions", Icons.Rounded.Tune),
     ).filter { (isTube || it.id !in tubeOnly) && (isYouTube || it.id != "advanced") }
     val fontPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -226,6 +230,7 @@ fun SettingsScreen(
         }
     }
 
+    if (page == "whatsnew") { WhatsNewScreen { page = null }; return }
     androidx.compose.runtime.CompositionLocalProvider(LocalGroupTitles provides query.isNotBlank()) {
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
@@ -423,6 +428,7 @@ fun SettingsScreen(
             } }
 
             if (show("backup", "backup restore save file new phone export import move")) item { Group("Backup") { BackupPanel() } }
+            if (show("ai", "ai service key model openrouter openai anthropic claude gemini groq mistral deepseek ollama grok transcript summary chapters ask answer")) item { Group("AI service") { AiPanel() } }
             if (show("updates", SettingsKeys.updates)) item { UpdateGroup(s, ::set) }
 
             // ---------- obsidian ----------
