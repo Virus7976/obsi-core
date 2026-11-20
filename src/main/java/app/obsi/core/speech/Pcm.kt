@@ -98,16 +98,24 @@ object Pcm {
      */
     var customSource: ((Uri) -> android.media.MediaDataSource?)? = null
 
-    /** Mixes to mono and changes the rate to 16 kHz, by straight lines between samples. Keeps its place between blocks. */
+    /**
+     * Mixes to mono and changes the rate to 16 kHz, by straight lines between samples. Keeps its place between
+     * blocks. Sound above 7 kHz is taken out first: at 16 kHz it cannot be kept, and left in it folds back
+     * down as a hiss over the voice, which makes speech recognition much less exact.
+     */
     class Resampler {
         private var pos = 0.0
         private var last = 0.0
+        private val low1 = LowPass()
+        private val low2 = LowPass()
 
         fun push(raw: ShortArray, channels: Int, rate: Int): ShortArray {
             val ch = channels.coerceAtLeast(1)
             val frames = raw.size / ch
             if (frames == 0) return ShortArray(0)
             val mono = DoubleArray(frames) { f -> var s = 0.0; for (c in 0 until ch) s += raw[f * ch + c]; s / ch }
+            // Two filters in a row cut the high sound off more steeply than one.
+            if (rate > RATE) { low1.run(mono, rate); low2.run(mono, rate) }
             val step = rate.toDouble() / RATE
             val out = ArrayList<Short>((frames / step).toInt() + 2)
             // pos is where the next output sample sits, counted from the end of the block before (-1 is its last sample).
@@ -123,6 +131,54 @@ object Pcm {
             last = mono[frames - 1]
             return out.toShortArray()
         }
+    }
+
+    /** A low-pass filter at 7 kHz (a Butterworth biquad). Keeps its state between blocks. */
+    class LowPass {
+        private var rate = 0
+        private var b0 = 1.0; private var b1 = 0.0; private var b2 = 0.0; private var a1 = 0.0; private var a2 = 0.0
+        private var x1 = 0.0; private var x2 = 0.0; private var y1 = 0.0; private var y2 = 0.0
+
+        fun run(s: DoubleArray, rate: Int) {
+            if (rate != this.rate) {
+                this.rate = rate
+                val w = 2 * Math.PI * 7000.0 / rate
+                val alpha = kotlin.math.sin(w) / (2 * kotlin.math.sqrt(0.5))
+                val cos = kotlin.math.cos(w)
+                val a0 = 1 + alpha
+                b0 = (1 - cos) / 2 / a0; b1 = (1 - cos) / a0; b2 = b0
+                a1 = -2 * cos / a0; a2 = (1 - alpha) / a0
+            }
+            for (i in s.indices) {
+                val x = s[i]
+                val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+                x2 = x1; x1 = x; y2 = y1; y1 = y
+                s[i] = y
+            }
+        }
+    }
+
+    /**
+     * Where to cut 16-bit mono sound [pcm] (bytes) so no word is cut in two: the quietest tenth of a second
+     * in the last [within] samples. Returns a byte index, always even.
+     */
+    fun quietCut(pcm: ByteArray, within: Int): Int {
+        val n = pcm.size / 2
+        val win = RATE / 10
+        if (n <= win * 2) return n * 2
+        val from = (n - within).coerceAtLeast(n / 2)
+        val bb = java.nio.ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN)
+        var best = n
+        var bestSum = Long.MAX_VALUE
+        var i = from
+        while (i + win <= n) {
+            var sum = 0L
+            var k = i
+            while (k < i + win) { sum += kotlin.math.abs(bb.getShort(k * 2).toInt()); k += 4 }
+            if (sum < bestSum) { bestSum = sum; best = i + win / 2 }
+            i += win / 2
+        }
+        return best * 2
     }
 
     /** A WAV file header for 16 kHz mono 16-bit samples, [bytes] long. */

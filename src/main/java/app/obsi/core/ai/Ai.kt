@@ -83,7 +83,7 @@ enum class AiProvider(
     Groq(
         "groq", "Groq", "Very fast open models. Also makes transcripts. Has a free tier.",
         "https://api.groq.com/openai/v1", "https://console.groq.com/keys",
-        defaultModel = "llama-3.3-70b-versatile", prefer = listOf("llama-3.3-70b", "llama"), speechModel = "whisper-large-v3-turbo", keyHint = "gsk_…",
+        defaultModel = "llama-3.3-70b-versatile", prefer = listOf("llama-3.3-70b", "llama"), speechModel = "whisper-large-v3", keyHint = "gsk_…",
     ),
     Mistral(
         "mistral", "Mistral", "Models from Europe.",

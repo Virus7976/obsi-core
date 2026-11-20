@@ -50,9 +50,9 @@ object Speech {
 }
 
 /**
- * Any service with the OpenAI transcription API: OpenAI, Groq, or your own server. You bring the key.
- * The sound is cut into 10-minute pieces (about 19 MB each, under the 25 MB limit) and each is sent
- * as soon as it is ready, so a long file never sits in memory whole.
+ * Any service with the OpenAI transcription API: OpenAI, Groq, OpenRouter, or your own server. You bring
+ * the key. The sound is cut into pieces of about 5 minutes, each at the quietest moment near its end so no
+ * word is cut in two, and each is sent as soon as it is ready, so a long file never sits in memory whole.
  */
 class Cloud(
     private val http: OkHttpClient,
@@ -61,36 +61,47 @@ class Cloud(
     val model: String,
     /** Blank lets the service find the language. */
     val language: String = "",
+    /** Words the speech is likely to have, like the lesson title, so names are spelled right. */
+    val hint: String = "",
 ) {
     suspend fun transcribe(context: Context, uri: Uri, headers: Map<String, String>, onProgress: (Float) -> Unit): TranscriptData {
         val words = ArrayList<Word>()
         val buf = ByteArrayOutputStream()
-        var samples = 0L
+        // Where the sound in buf starts, in seconds.
         var pieceStart = 0.0
         var sent = 0
-        val perPiece = Pcm.RATE * 60 * 10
-        fun flush() {
-            if (buf.size() == 0) return
+        var heard = false
+        fun send(bytes: ByteArray) {
             val offset = pieceStart
-            words += send(buf.toByteArray()).map { it.copy(start = it.start + offset, end = it.end + offset) }
-            buf.reset()
+            // The end of the piece before helps the service carry on in the same style and spelling.
+            val before = words.takeLast(40).joinToString(" ") { it.text }
+            val got = send(bytes, listOf(hint, before).filter { it.isNotBlank() }.joinToString(" ").takeLast(800))
+            words += got.map { it.copy(start = it.start + offset, end = it.end + offset) }
             sent++
-            pieceStart = samples.toDouble() / Pcm.RATE
+        }
+        fun flush(all: Boolean) {
+            if (buf.size() == 0) return
+            val bytes = buf.toByteArray()
+            val cut = if (all) bytes.size else Pcm.quietCut(bytes, Pcm.RATE * 20)
+            send(bytes.copyOfRange(0, cut))
+            buf.reset()
+            buf.write(bytes, cut, bytes.size - cut)
+            pieceStart += cut / 2.0 / Pcm.RATE
         }
         Pcm.decode(context, uri, headers, onProgress) { block ->
             val bb = java.nio.ByteBuffer.allocate(block.size * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
             block.forEach { bb.putShort(it) }
             buf.write(bb.array())
-            samples += block.size
-            if (buf.size() >= perPiece * 2) flush()
+            if (block.isNotEmpty()) heard = true
+            if (buf.size() >= PIECE * 2) flush(all = false)
         }
-        flush()
-        if (sent == 0) error("This file has no sound to transcribe.")
+        flush(all = true)
+        if (!heard || sent == 0) error("This file has no sound to transcribe.")
         if (words.isEmpty()) error("No speech was heard.")
         return TranscriptData(lang = language, auto = true, cues = Speech.cues(words))
     }
 
-    private fun send(pcm: ByteArray): List<Word> {
+    private fun send(pcm: ByteArray, prompt: String): List<Word> {
         val wav = Pcm.wavHeader(pcm.size) + pcm
         val form = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("file", "speech.wav", wav.toRequestBody("audio/wav".toMediaType()))
@@ -98,7 +109,9 @@ class Cloud(
             .addFormDataPart("response_format", "verbose_json")
             .addFormDataPart("timestamp_granularities[]", "word")
             .addFormDataPart("timestamp_granularities[]", "segment")
+            .addFormDataPart("temperature", "0")
             .apply { if (language.isNotBlank()) addFormDataPart("language", language) }
+            .apply { if (prompt.isNotBlank()) addFormDataPart("prompt", prompt) }
             .build()
         val req = Request.Builder().url(url.trimEnd('/') + "/audio/transcriptions")
             .header("Authorization", "Bearer " + key.trim())
@@ -113,20 +126,44 @@ class Cloud(
     }
 
     companion object {
-        /** Words from an OpenAI-style answer. Without word times, each segment's words are spread over it. */
+        /** About 5 minutes of 16 kHz sound: under every service's size limit, and quick enough for its time limit. */
+        const val PIECE = Pcm.RATE * 60 * 5
+
+        private fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+
+        /**
+         * Words from an OpenAI-style answer. The segments have the text with its capitals and stops; the
+         * word list has the times but no stops. So the segment text is used, and each of its words gets the
+         * time of the same word in the list. Without a word list, each segment's words are spread over it.
+         */
         fun parse(text: String): List<Word> {
             val o = Json { ignoreUnknownKeys = true; isLenient = true }.parseToJsonElement(text).jsonObject
             fun JsonObject.d(k: String) = this[k]?.jsonPrimitive?.doubleOrNull ?: 0.0
-            val words = o["words"]?.jsonArray.orEmpty().map { it.jsonObject }.mapNotNull { w ->
+            val timed = o["words"]?.jsonArray.orEmpty().map { it.jsonObject }.mapNotNull { w ->
                 val t = w["word"]?.jsonPrimitive?.contentOrNull?.trim() ?: return@mapNotNull null
                 if (t.isEmpty()) null else Word(t, w.d("start"), w.d("end"))
             }
-            if (words.isNotEmpty()) return words
-            return o["segments"]?.jsonArray.orEmpty().map { it.jsonObject }.flatMap { seg ->
-                val parts = seg["text"]?.jsonPrimitive?.contentOrNull.orEmpty().trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val segs = o["segments"]?.jsonArray.orEmpty().map { it.jsonObject }
+            if (segs.isEmpty()) return timed
+            val out = ArrayList<Word>()
+            var j = 0
+            for (seg in segs) {
+                val parts = seg["text"]?.jsonPrimitive?.contentOrNull.orEmpty().trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
                 val a = seg.d("start"); val b = seg.d("end")
-                parts.mapIndexed { i, t -> Word(t, a + (b - a) * i / parts.size, a + (b - a) * (i + 1) / parts.size) }
+                parts.forEachIndexed { i, p ->
+                    val n = norm(p)
+                    // A mark on its own, like a dash, joins the word before it.
+                    if (n.isEmpty() && out.isNotEmpty()) { out[out.lastIndex] = out.last().let { it.copy(text = it.text + " " + p) }; return@forEachIndexed }
+                    val k = (j until minOf(j + 6, timed.size)).firstOrNull { norm(timed[it].text) == n }
+                    out += when {
+                        k != null -> { j = k + 1; timed[k].copy(text = p) }
+                        timed.isEmpty() -> Word(p, a + (b - a) * i / parts.size, a + (b - a) * (i + 1) / parts.size)
+                        // Not in the list: it goes right after the word before.
+                        else -> { val t = out.lastOrNull()?.end ?: a; Word(p, t, t) }
+                    }
+                }
             }
+            return out
         }
     }
 }

@@ -59,6 +59,50 @@ class SpeechTest {
         var n = 0
         repeat(4) { n += r.push(ShortArray(48_000 / 4 * 2) { 1000 }, 2, 48_000).size }
         assertTrue(n in 15_990..16_010)
-        assertEquals(1000.toShort(), r.push(ShortArray(96) { 1000 }, 2, 48_000).first())
+        // A steady level stays the same level once the filter has settled.
+        assertTrue(r.push(ShortArray(96) { 1000 }, 2, 48_000).first() in 998..1000)
+    }
+
+    /** How loud a tone of [hz] at 48 kHz comes out at 16 kHz, 0..1. */
+    private fun gain(hz: Double): Double {
+        val r = Pcm.Resampler()
+        val inp = ShortArray(48_000) { (10_000 * kotlin.math.sin(2 * Math.PI * hz * it / 48_000)).toInt().toShort() }
+        val out = r.push(inp, 1, 48_000).drop(1600)
+        return kotlin.math.sqrt(out.sumOf { it.toDouble() * it } / out.size) / (10_000 / kotlin.math.sqrt(2.0))
+    }
+
+    @Test fun voiceStaysAndHighSoundIsTakenOut() {
+        // Speech sits well under 4 kHz and must come through.
+        assertTrue("1 kHz ${gain(1000.0)}", gain(1000.0) > 0.95)
+        // 12 kHz would fold down to 4 kHz, right on the voice. It must be nearly gone.
+        assertTrue("12 kHz ${gain(12_000.0)}", gain(12_000.0) < 0.12)
+    }
+
+    @Test fun cutsAtTheQuietMoment() {
+        // Ten seconds of loud sound with a quiet spot at 8 s.
+        val n = Pcm.RATE * 10
+        val bb = java.nio.ByteBuffer.allocate(n * 2).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        for (i in 0 until n) bb.putShort(if (i in Pcm.RATE * 8 until Pcm.RATE * 8 + 3200) 0 else (if (i % 2 == 0) 8000 else -8000).toShort())
+        val cut = Pcm.quietCut(bb.array(), Pcm.RATE * 5) / 2
+        assertTrue("cut at $cut", cut in Pcm.RATE * 8 until Pcm.RATE * 8 + 3200)
+        assertEquals(0, Pcm.quietCut(bb.array(), Pcm.RATE * 5) % 2)
+    }
+
+    @Test fun keepsCapitalsAndStopsFromTheSegments() {
+        val w = Cloud.parse(
+            """{"segments":[{"start":0.0,"end":2.0,"text":" Hi there, Jake. It's 5 o'clock — late."}],
+               "words":[{"word":"Hi","start":0.0,"end":0.2},{"word":"there","start":0.3,"end":0.5},{"word":"Jake","start":0.6,"end":0.9},
+                        {"word":"It's","start":1.0,"end":1.1},{"word":"5","start":1.2,"end":1.3},{"word":"o'clock","start":1.3,"end":1.6},{"word":"late","start":1.7,"end":2.0}]}""",
+        )
+        assertEquals(listOf("Hi", "there,", "Jake.", "It's", "5", "o'clock —", "late."), w.map { it.text })
+        assertEquals(listOf(0.0, 0.3, 0.6, 1.0, 1.2, 1.3, 1.7), w.map { it.start })
+    }
+
+    @Test fun aWordMissingFromTheTimesStillShows() {
+        val w = Cloud.parse(
+            """{"segments":[{"start":0.0,"end":1.0,"text":"One extra two."}],"words":[{"word":"one","start":0.0,"end":0.3},{"word":"two","start":0.6,"end":0.9}]}""",
+        )
+        assertEquals(listOf("One", "extra", "two."), w.map { it.text })
+        assertEquals(listOf(0.0, 0.3, 0.6), w.map { it.start })
     }
 }
