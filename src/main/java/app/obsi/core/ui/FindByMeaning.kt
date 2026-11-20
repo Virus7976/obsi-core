@@ -57,8 +57,9 @@ fun LazyListScope.findByMeaning(query: String) {
 @Composable
 private fun FindByMeaning(query: String) {
     val ctx = LocalContext.current
-    val ai by remember { Ai.store(ctx) }.state.collectAsState()
-    if (!ai.ready) return
+    remember { Ai.store(ctx) }
+    val usable by Ai.usable.collectAsState()
+    if (!usable) return
     val scope = rememberCoroutineScope()
     val scheme = MaterialTheme.colorScheme
     var found by remember(query) { mutableStateOf(Meaning.cached(query)) }

@@ -81,7 +81,7 @@ object Cloze {
      * Does nothing when no service is set up. Never throws.
      */
     suspend fun improve(context: Context, items: List<Pair<String, String>>) = withContext(Dispatchers.IO) {
-        if (!Ai.store(context).value.ready) return@withContext
+        if (!Ai.readyNow) return@withContext
         val todo = items.filter { (id, text) -> prefs(context).getString(id, null) == null && pick(text) != null }.take(12)
         if (todo.isEmpty()) return@withContext
         runCatching {

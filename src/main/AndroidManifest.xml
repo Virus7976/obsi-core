@@ -26,6 +26,10 @@
     </queries>
 
     <application>
+        <!-- The phone's graphics chip runs an AI model much faster. Not every phone has these. -->
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+
         <provider
             android:name="app.obsi.core.share.SharedHighlightsProvider"
             android:authorities="${applicationId}.obsi"

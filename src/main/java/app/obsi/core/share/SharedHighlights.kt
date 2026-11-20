@@ -87,6 +87,7 @@ class SharedHighlightsProvider : ContentProvider() {
         if (uri.lastPathSegment == "setup") return SharedSetup.cursor()
         if (uri.lastPathSegment == "ai") return context?.let { app.obsi.core.ai.Ai.cursor(it) }
         if (uri.lastPathSegment == "weekly") return context?.let { app.obsi.core.obsidian.WeeklyNote.cursor(it) }
+        if (uri.lastPathSegment == "model") return context?.let { app.obsi.core.ai.OnPhone.modelCursor(it) }
         if (uri.lastPathSegment == "style") return SharedStyle.cursor()
         if (uri.lastPathSegment == "activity") return context?.let { app.obsi.core.data.SharedActivity.cursor(it) }
         if (uri.lastPathSegment == "search") return SharedSearch.cursor(selectionArgs?.firstOrNull().orEmpty())
@@ -110,6 +111,10 @@ class SharedHighlightsProvider : ContentProvider() {
         val ctx = context ?: return null
         // A file is not covered by the read permission alone, so check it here, for reading and writing.
         ctx.enforceCallingPermission(ctx.packageName + ".permission.OBSI_SHARE", "Only the Obsi apps may do this.")
+        // "model": the AI model file this app keeps, lent to the other apps to read, so it is kept once.
+        if (uri.lastPathSegment == "model") return app.obsi.core.ai.OnPhone.ownFile(ctx)?.let {
+            android.os.ParcelFileDescriptor.open(it, android.os.ParcelFileDescriptor.MODE_READ_ONLY)
+        }
         return SharedBackup.open(ctx, uri.lastPathSegment.orEmpty(), mode)
     }
 

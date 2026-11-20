@@ -72,6 +72,8 @@ fun AiPanel() {
     val uri = LocalUriHandler.current
     val scheme = MaterialTheme.colorScheme
     LaunchedEffect(Unit) { Ai.pullFromOthers(ctx) }
+    val phone by app.obsi.core.ai.OnPhone.state.collectAsState()
+    val usable by Ai.usable.collectAsState()
 
     val p = c.service
     var showKey by remember { mutableStateOf(false) }
@@ -106,30 +108,47 @@ fun AiPanel() {
     LaunchedEffect(c.provider, c.key(p ?: AiProvider.OpenRouter), c.urls[c.provider]) { test = null; loadModels() }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        // ---- where it stands
+        // ---- where it stands: what answers now, or why nothing does
+        val using = remember(c, phone, usable) { Ai.using(ctx) }
+        val phoneName = when {
+            phone.builtInReady -> "Gemini Nano"
+            phone.file != null -> app.obsi.core.ai.PhoneModel.ofFile(phone.file!!)?.title ?: "The model on this phone"
+            else -> ""
+        }
+        val (title, about) = when (using) {
+            "service" -> modelName(c.model(p!!), lists[p.id]) to (
+                "Through ${p.title}. Finds things by meaning in search, and suggests tags." +
+                    if (phone.ready && c.onPhone != "off") " With no internet, $phoneName on this phone takes over." else ""
+                )
+            "phone" -> phoneName to (
+                if (c.ready) "No internet, so the model on this phone answers. Nothing leaves the phone."
+                else "Runs on this phone, with no internet. Finds things by meaning in search, and suggests tags."
+                )
+            else -> if (c.ready || phone.ready) "Off right now" to (
+                "No internet, and no model on this phone to use. Find by meaning and tag ideas are hidden until one works. Everything else works the same."
+                ) else "Not set up" to (
+                "Optional. With a service or a model on this phone, search finds your highlights by meaning, and tags are suggested when you add them."
+                )
+        }
+        val on = using.isNotEmpty()
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                .background(if (c.ready) scheme.secondaryContainer else scheme.surfaceContainerHigh).padding(16.dp),
+                .background(if (on) scheme.secondaryContainer else scheme.surfaceContainerHigh).padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                if (c.ready) Icons.Rounded.CheckCircle else Icons.Rounded.Key, null,
-                tint = if (c.ready) scheme.primary else scheme.onSurfaceVariant,
+                if (on) Icons.Rounded.CheckCircle else Icons.Rounded.Key, null,
+                tint = if (on) scheme.primary else scheme.onSurfaceVariant,
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (c.ready && p != null) modelName(c.model(p), lists[p.id]) else "Not set up",
+                    title,
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                    color = if (c.ready) scheme.onSecondaryContainer else scheme.onSurface,
+                    color = if (on) scheme.onSecondaryContainer else scheme.onSurface,
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    if (c.ready && p != null) "Through ${p.title}. Used to find things by meaning in search, and to suggest tags."
-                    else "Optional. With a service, search finds your highlights by meaning, and tags are suggested when you add them.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (c.ready) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
-                )
+                Text(about, style = MaterialTheme.typography.bodySmall, color = if (on) scheme.onSecondaryContainer else scheme.onSurfaceVariant)
             }
         }
 
@@ -218,8 +237,11 @@ fun AiPanel() {
             }
         }
 
+        // ---- AI on the phone: Gemini Nano, or a downloaded model
+        OnPhoneSection()
+
         // ---- tag ideas: by themselves, or on a tap
-        if (c.ready) {
+        if (c.ready || phone.ready) {
             Label("Tag ideas")
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(scheme.surfaceContainerHigh).padding(4.dp),
@@ -241,7 +263,7 @@ fun AiPanel() {
             }
             Text(
                 if (c.tagIdeas == "ask") "A small Suggest tags button sits under each tag field. Nothing is sent until you tap it."
-                else "When you add a quote, a few tags appear under it. Your own tags come first. Each quote is asked about once.",
+                else "When you add a quote, a few tags appear once you finish your note. They read the quote and your note. Your own tags come first.",
                 style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
             )
         }

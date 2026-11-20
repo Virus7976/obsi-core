@@ -126,6 +126,8 @@ data class AiConfig(
     val speechProvider: String = "",
     /** Tag ideas: "auto" shows them by themselves when you add a quote, "ask" waits for a tap. */
     val tagIdeas: String = "auto",
+    /** The model on the phone: "auto" is used when no service works (no internet, or the service fails), "off" never. */
+    val onPhone: String = "auto",
     val updatedAt: Long = 0L,
 ) {
     val service: AiProvider? get() = AiProvider.of(provider)
@@ -149,7 +151,7 @@ data class AiModel(val id: String, val name: String, val note: String = "")
 class AiException(message: String) : Exception(message)
 
 /** The AI setup on this phone, shared by every Obsi app. */
-class AiStore(context: Context) : JsonFileStore<AiConfig>(File(context.filesDir, "ai.json")) {
+class AiStore(private val context: Context) : JsonFileStore<AiConfig>(File(context.filesDir, "ai.json")) {
     private val _state = MutableStateFlow(readOrNull() ?: AiConfig())
     val state: StateFlow<AiConfig> = _state.asStateFlow()
     val value: AiConfig get() = _state.value
@@ -159,6 +161,7 @@ class AiStore(context: Context) : JsonFileStore<AiConfig>(File(context.filesDir,
     fun update(block: (AiConfig) -> AiConfig) {
         _state.update { block(it).copy(updatedAt = System.currentTimeMillis()) }
         persist(_state.value)
+        Ai.recheck(context)
     }
 
     /** Takes a newer setup from another Obsi app, as it is. */
@@ -166,6 +169,7 @@ class AiStore(context: Context) : JsonFileStore<AiConfig>(File(context.filesDir,
         if (c.updatedAt <= _state.value.updatedAt) return
         _state.value = c
         persist(c)
+        Ai.recheck(context)
     }
 }
 
@@ -173,10 +177,51 @@ object Ai {
     internal val json = Json { ignoreUnknownKeys = true; isLenient = true; encodeDefaults = true; explicitNulls = false }
 
     @Volatile private var store: AiStore? = null
-    fun store(context: Context): AiStore = store ?: synchronized(this) { store ?: AiStore(context.applicationContext).also { store = it } }
+    fun store(context: Context): AiStore = store ?: synchronized(this) {
+        store ?: AiStore(context.applicationContext).also { store = it; watchNetwork(context.applicationContext); recheck(context) }
+    }
 
-    /** Is a service set up? Readable anywhere, also outside a screen. */
-    val readyNow: Boolean get() = store?.value?.ready == true
+    private val _usable = MutableStateFlow(false)
+    /**
+     * Some AI works right now: a service with the internet up, or a model on the phone. When nothing
+     * works, the AI parts of the apps are hidden, and Settings › AI says why.
+     */
+    val usable: StateFlow<Boolean> = _usable.asStateFlow()
+
+    /** Readable anywhere, also outside a screen. */
+    val readyNow: Boolean get() = _usable.value
+
+    @Volatile var online: Boolean = true
+        private set
+
+    /** Works out [usable] again, after the setup, the network or the phone's model changed. */
+    fun recheck(context: Context) {
+        val c = store(context).value
+        val phone = c.onPhone != "off" && OnPhone.state.value.ready
+        _usable.value = (c.ready && (online || c.service?.needsUrl == true)) || phone
+    }
+
+    /** Which one answers now, for Settings: "service", "phone" or "" for none. */
+    fun using(context: Context): String {
+        val c = store(context).value
+        return when {
+            c.ready && (online || c.service?.needsUrl == true) -> "service"
+            c.onPhone != "off" && OnPhone.state.value.ready -> "phone"
+            else -> ""
+        }
+    }
+
+    private fun watchNetwork(ctx: Context) {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return
+        fun now() = cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+        online = runCatching { now() }.getOrDefault(true)
+        runCatching {
+            cm.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) { online = true; recheck(ctx) }
+                override fun onLost(network: android.net.Network) { online = runCatching { now() }.getOrDefault(false); recheck(ctx) }
+            })
+        }
+    }
 
     val http: OkHttpClient by lazy {
         OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(5, TimeUnit.MINUTES).callTimeout(6, TimeUnit.MINUTES).build()
@@ -247,16 +292,46 @@ object Ai {
     suspend fun ask(context: Context, system: String, user: String, fast: Boolean = false, jsonOut: Boolean = false, maxTokens: Int = 16000): String =
         withContext(Dispatchers.IO) {
             val c = store(context).value
-            val p = c.service ?: throw AiException("Set up AI first: Settings, then AI.")
-            if (!c.ready) throw AiException("Finish setting up AI: Settings, then AI.")
-            when (p.style) {
-                AiStyle.Anthropic -> anthropic(c, p, system, user, fast, maxTokens)
-                AiStyle.OpenAi -> openAi(c, p, system, user, jsonOut, maxTokens)
-            }.trim().let { if (jsonOut) stripFence(it) else it }
+            val p = c.service
+            val usePhone = c.onPhone != "off"
+            if (usePhone && OnPhone.state.value.builtIn < 0) runCatching { OnPhone.check(context) }
+            val phone = usePhone && OnPhone.state.value.ready
+            // 1. The service, when it is set up and the internet is up (a server at home needs no internet).
+            var failed: AiException? = null
+            if (p != null && c.ready && (online || p.needsUrl)) {
+                try {
+                    return@withContext when (p.style) {
+                        AiStyle.Anthropic -> anthropic(c, p, system, user, fast, maxTokens)
+                        AiStyle.OpenAi -> openAi(c, p, system, user, jsonOut, maxTokens)
+                    }.trim().let { if (jsonOut) stripFence(it) else it }
+                } catch (e: AiException) { failed = e }
+            }
+            // 2. The model on the phone.
+            if (phone) return@withContext OnPhone.ask(context, system, user, maxTokens).trim().let { if (jsonOut) stripFence(it) else it }
+            // 3. Nothing works: say why. The screens that call this show nothing.
+            throw failed ?: AiException(
+                when {
+                    p == null -> "Set up AI first: Settings, then AI."
+                    !c.ready -> "Finish setting up AI: Settings, then AI."
+                    else -> "No internet, and no AI on this phone."
+                },
+            )
         }
 
     /** A short test, so the setup page can say it works. */
-    suspend fun test(context: Context): String = ask(context, "Answer in at most five words.", "Say hello to a new user of a learning app.", fast = true, maxTokens = 300)
+    suspend fun test(context: Context): String = withContext(Dispatchers.IO) {
+        val c = store(context).value
+        val p = c.service ?: throw AiException("Pick a service first.")
+        if (!c.ready) throw AiException("Finish setting up the service first.")
+        val sys = "Answer in at most five words."; val q = "Say hello to a new user of a learning app."
+        when (p.style) {
+            AiStyle.Anthropic -> anthropic(c, p, sys, q, true, 300)
+            AiStyle.OpenAi -> openAi(c, p, sys, q, false, 300)
+        }.trim()
+    }
+
+    /** A short test of the model on the phone. */
+    suspend fun testPhone(context: Context): String = OnPhone.ask(context, "Answer in at most five words.", "Say hello to a new user of a learning app.", 40).trim()
 
     private fun openAi(c: AiConfig, p: AiProvider, system: String, user: String, jsonOut: Boolean, maxTokens: Int): String {
         val model = c.model(p)

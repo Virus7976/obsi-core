@@ -41,6 +41,8 @@ object OnLeave {
     fun arrive(context: Context) {
         scope.launch {
             runCatching { app.obsi.core.ai.Ai.pullFromOthers(context) }
+            // What the phone can run may have changed: Gemini Nano arrived, or another app downloaded a model.
+            runCatching { app.obsi.core.ai.OnPhone.check(context); app.obsi.core.ai.OnPhone.watch(context) }
             runCatching { app.obsi.core.obsidian.WeeklyNote.pullFromOthers(context) }
         }
     }
