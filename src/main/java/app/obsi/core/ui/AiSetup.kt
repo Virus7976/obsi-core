@@ -279,7 +279,7 @@ fun AiPanel() {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Make transcripts with", style = MaterialTheme.typography.labelLarge, color = scheme.onSurfaceVariant)
-                    Text(sp?.let { "${it.title} (${it.speechModel})" } ?: "Not set: add a Groq or OpenAI key", style = MaterialTheme.typography.bodyLarge)
+                    Text(sp?.let { "${it.title} (${it.speechModel})" } ?: "Not set: add an OpenRouter, Groq or OpenAI key", style = MaterialTheme.typography.bodyLarge)
                 }
                 Icon(Icons.Rounded.ChevronRight, null, tint = scheme.onSurfaceVariant)
             }

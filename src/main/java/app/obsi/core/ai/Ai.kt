@@ -61,9 +61,9 @@ enum class AiProvider(
     val keyHint: String = "",
 ) {
     OpenRouter(
-        "openrouter", "OpenRouter", "One key for models from every company. Pay as you go.",
+        "openrouter", "OpenRouter", "One key for models from every company. Also makes transcripts. Pay as you go.",
         "https://openrouter.ai/api/v1", "https://openrouter.ai/settings/keys",
-        defaultModel = "google/gemini-2.5-flash", prefer = listOf("gemini-2.5-flash", "claude-haiku", "gpt-5-mini"), keyHint = "sk-or-…",
+        defaultModel = "google/gemini-2.5-flash", prefer = listOf("gemini-2.5-flash", "claude-haiku", "gpt-5-mini"), speechModel = "openai/whisper-large-v3", keyHint = "sk-or-…",
     ),
     Anthropic(
         "anthropic", "Anthropic", "Claude models, from the company that makes them.",
