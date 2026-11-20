@@ -47,6 +47,49 @@ object Speech {
         flush()
         return out
     }
+
+    /** The words of [cues] again, each with its own time. The other way round from [cues]. */
+    fun words(cues: List<Cue>): List<Word> = cues.flatMap { c ->
+        val parts = c.text.trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
+        val offs = c.offs?.takeIf { it.size == parts.size }
+        parts.mapIndexed { i, p ->
+            val s = c.start + (offs?.get(i) ?: (c.dur * i / parts.size))
+            val e = c.start + (offs?.getOrNull(i + 1) ?: if (offs == null) c.dur * (i + 1) / parts.size else c.dur)
+            Word(p, s, maxOf(e, s))
+        }
+    }
+
+    fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
+
+    /**
+     * Gives text its times. One engine or step gives good text with no times (or rough ones); another gives
+     * times for nearly the same words. Each word of the text takes the time of the same word in [timed],
+     * looked for a few words ahead, so a word that differs or is missing does not throw the rest off.
+     */
+    class Aligner(private val timed: List<Word>) {
+        private var j = 0
+
+        /** Adds the words [parts], said between [a] and [b] seconds, to [out]. */
+        fun take(parts: List<String>, a: Double, b: Double, out: MutableList<Word>) {
+            val letters = parts.sumOf { maxOf(1, norm(it).length) }.toDouble()
+            var done = 0
+            parts.forEach { p ->
+                val n = norm(p)
+                // A mark on its own, like a dash, joins the word before it.
+                if (n.isEmpty() && out.isNotEmpty()) { out[out.lastIndex] = out.last().let { it.copy(text = it.text + " " + p) }; return@forEach }
+                val k = (j until minOf(j + 6, timed.size)).firstOrNull { norm(timed[it].text) == n }
+                val size = maxOf(1, n.length)
+                out += when {
+                    k != null -> { j = k + 1; timed[k].copy(text = p) }
+                    // No times at all: spread the words over the stretch, a long word taking longer.
+                    timed.isEmpty() -> Word(p, a + (b - a) * done / letters, a + (b - a) * (done + size) / letters)
+                    // Not in the list: it goes right after the word before.
+                    else -> { val t = out.lastOrNull()?.end ?: a; Word(p, t, t) }
+                }
+                done += size
+            }
+        }
+    }
 }
 
 /**
@@ -129,8 +172,6 @@ class Cloud(
         /** About 5 minutes of 16 kHz sound: under every service's size limit, and quick enough for its time limit. */
         const val PIECE = Pcm.RATE * 60 * 5
 
-        private fun norm(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
-
         /**
          * Words from an OpenAI-style answer. The segments have the text with its capitals and stops; the
          * word list has the times but no stops. So the segment text is used, and each of its words gets the
@@ -146,22 +187,10 @@ class Cloud(
             val segs = o["segments"]?.jsonArray.orEmpty().map { it.jsonObject }
             if (segs.isEmpty()) return timed
             val out = ArrayList<Word>()
-            var j = 0
+            val align = Speech.Aligner(timed)
             for (seg in segs) {
                 val parts = seg["text"]?.jsonPrimitive?.contentOrNull.orEmpty().trim().split(Regex("""\s+""")).filter { it.isNotEmpty() }
-                val a = seg.d("start"); val b = seg.d("end")
-                parts.forEachIndexed { i, p ->
-                    val n = norm(p)
-                    // A mark on its own, like a dash, joins the word before it.
-                    if (n.isEmpty() && out.isNotEmpty()) { out[out.lastIndex] = out.last().let { it.copy(text = it.text + " " + p) }; return@forEachIndexed }
-                    val k = (j until minOf(j + 6, timed.size)).firstOrNull { norm(timed[it].text) == n }
-                    out += when {
-                        k != null -> { j = k + 1; timed[k].copy(text = p) }
-                        timed.isEmpty() -> Word(p, a + (b - a) * i / parts.size, a + (b - a) * (i + 1) / parts.size)
-                        // Not in the list: it goes right after the word before.
-                        else -> { val t = out.lastOrNull()?.end ?: a; Word(p, t, t) }
-                    }
-                }
+                align.take(parts, seg.d("start"), seg.d("end"), out)
             }
             return out
         }
