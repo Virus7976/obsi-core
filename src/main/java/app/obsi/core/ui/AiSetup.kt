@@ -268,8 +268,8 @@ fun AiPanel() {
             )
         }
 
-        // ---- transcripts: only the apps that play
-        if (Brand.app.timed) {
+        // ---- transcripts: only the app that makes them (ObsiTube gets YouTube's own)
+        if (Brand.app == ObsiApp.Learn) {
             Label("Transcripts")
             val sp = c.speech
             Row(
