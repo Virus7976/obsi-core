@@ -14,8 +14,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * idea always gets the same tag. Asked once per quote and note, and kept on the phone.
  */
 object TagIdeas {
-    // "2": the rules changed, so ideas made with the old rules are asked again.
-    private fun prefs(c: Context) = c.getSharedPreferences("obsi_tag_ideas2", Context.MODE_PRIVATE)
+    // "3": the rules changed, so ideas made with the old rules are asked again.
+    private fun prefs(c: Context) = c.getSharedPreferences("obsi_tag_ideas3", Context.MODE_PRIVATE)
     private fun squash(s: String) = s.trim().replace(Regex("""\s+"""), " ")
     private fun key(text: String, note: String) = java.security.MessageDigest.getInstance("SHA-256")
         .digest((squash(text) + "\u0000" + squash(note)).lowercase().toByteArray())
@@ -34,22 +34,27 @@ object TagIdeas {
     )
 
     /**
-     * True when [tag] is a real topic. False for filler, and for a phrase of three or more words
-     * copied from the quote or the note: "live-your-own-life" from the note "live your own life".
-     * A tag the person already uses is always kept.
+     * The person's own tag for [tag], when they already have one for the same idea: "habit" gives
+     * their "habits", and "carl-jung" gives their "jung". Null when none of theirs matches.
      */
-    internal fun keep(tag: String, text: String, note: String, mine: Collection<String> = emptyList()): Boolean {
+    internal fun theirs(tag: String, mine: Collection<String>): String? {
+        if (tag.isBlank()) return null
+        fun same(a: String, b: String) = a == b || a == b + "s" || b == a + "s" || a == b + "es" || b == a + "es" ||
+            a.replace("-", "") == b.replace("-", "")
+        mine.firstOrNull { same(it, tag) }?.let { return it }
+        val words = tag.split('-', '/').filter { it.length > 2 }
+        return if (words.size > 1) mine.firstOrNull { m -> words.any { same(m, it) } } else null
+    }
+
+    /**
+     * True when a new [tag] is a real topic: one word, and not filler. A tag the person already uses
+     * is always kept, whatever its shape.
+     */
+    internal fun keep(tag: String, mine: Collection<String> = emptyList()): Boolean {
         if (tag.isBlank()) return false
         if (tag in mine) return true
         if (tag in filler) return false
-        val words = tag.split('-', '/').filter { it.isNotBlank() }
-        if (words.size > 3) return false
-        if (words.size >= 3) {
-            val phrase = words.joinToString(" ")
-            fun has(s: String) = " ${s.lowercase().replace(Regex("""[^\p{L}\p{N}]+"""), " ")} ".contains(" $phrase ")
-            if (has(text) || has(note)) return false
-        }
-        return true
+        return !tag.contains('-') && !tag.contains('/')
     }
 
     suspend fun suggest(context: Context, text: String, known: List<String>, note: String = ""): List<String> = withContext(Dispatchers.IO) {
@@ -64,19 +69,20 @@ object TagIdeas {
             Ai.ask(
                 context,
                 "Suggest 3 to 6 tags that a person would search for to find this highlight again in a year. " +
-                    "A tag is a topic: a theme, a field, a named person or work. Name what it is about, in your own words. " +
-                    "Never copy a phrase from the text or the note into a tag, and never use empty tags like note, quote, idea or life. " +
-                    "The note shows what the person cares about here; use it to pick the topics, not as a tag. " +
-                    "When one of their own tags fits, use it, copied exactly; add new tags for anything theirs do not cover. " +
-                    "Tags are lower case, 1 or 2 words joined by \"-\", no \"#\".\n" +
-                    "Example. Text: \"We are what we repeatedly do.\" Note: \"start small every day\". " +
-                    "Good: habits, discipline, aristotle. Bad: start-small-every-day, note.\n" +
+                    "Start with their own tags: use every one of them that fits, copied exactly. " +
+                    "Add a new tag only for a topic none of theirs covers. " +
+                    "A tag is one word naming a topic: a theme, a field, or a person (jung, not carl-jung). " +
+                    "Never copy a phrase from the text or the note, and never use empty tags like note, quote, idea or life. " +
+                    "The note shows what the person cares about here; use it to pick the topics. " +
+                    "Tags are lower case, one word, no \"#\".\n" +
+                    "Example. Their tags: habits, stoicism, focus. Text: \"We are what we repeatedly do.\" Note: \"start small every day\". " +
+                    "Good: habits, discipline, aristotle. Bad: habit, start-small, note.\n" +
                     "Reply with JSON only: {\"tags\": [\"...\"]}.",
                 "Their tags: ${mine.joinToString(", ").ifBlank { "(none yet)" }}\n\n$body",
                 fast = true, jsonOut = true, maxTokens = 150,
             ),
         )?.get("tags")?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull?.let(::clean) }
-            ?.filter { keep(it, text, note, mine) }?.distinct()?.take(6)
+            ?.map { theirs(it, mine) ?: it }?.filter { keep(it, mine) }?.distinct()?.take(6)
             ?: throw AiException("No tag ideas came back. Try again.")
         // Their own tags first, in the order they were given.
         val sorted = out.sortedBy { if (it in mine) 0 else 1 }
