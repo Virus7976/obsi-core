@@ -36,6 +36,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.withStyle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -127,12 +130,18 @@ fun ReviewSession(
         val others = SharedReview.fromOthers(context).map { ReviewEntry.of(it) }
         return (own + others).sortedBy { it.highlight.createdAt }
     }
+    val host = context.applicationContext as ObsiHost
+    val recall by remember { host.settings.state }.collectAsState().let { st -> androidx.compose.runtime.derivedStateOf { st.value.reviewRecall } }
     var batch by remember { mutableStateOf(due().take(limit)) }
     var loaded by remember { mutableStateOf(false) }
     androidx.compose.runtime.LaunchedEffect(Unit) { batch = everything().take(limit); loaded = true }
+    // With an AI service set up, better words to hide are picked quietly for the cards still to come.
+    androidx.compose.runtime.LaunchedEffect(batch, recall) { if (recall) Cloze.improve(context, batch.map { it.highlight.id to it.highlight.text }) }
     var last by remember { mutableStateOf<Undo?>(null) }
     androidx.compose.runtime.LaunchedEffect(last) { if (last != null) { kotlinx.coroutines.delay(6000); last = null } }
     var at by remember { mutableIntStateOf(0) }
+    /** The card whose hidden word is showing. */
+    var revealedAt by remember { mutableIntStateOf(-1) }
     var kept by remember { mutableIntStateOf(0) }
     var dropped by remember { mutableIntStateOf(0) }
     val offset = remember { Animatable(0f) }
@@ -188,6 +197,9 @@ fun ReviewSession(
             ) }
         } else {
             val h = item.highlight
+            // The word to hide, fixed when the card shows so it never changes while you think.
+            val gap = remember(at, recall) { if (recall && h.text.isNotBlank()) Cloze.saved(context, h.id, h.text) ?: Cloze.pick(h.text) else null }
+            val revealed = revealedAt == at
             val tone = item.from?.let { Color(it.color) } ?: HighlightColors.getOrNull(h.color)?.ui?.let { Color(it) } ?: scheme.primary
             androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), contentAlignment = Alignment.Center) {
                 // A quiet cue behind the card: a check on the left for keep, a cross on the right for drop.
@@ -212,6 +224,17 @@ fun ReviewSession(
                 }
                 val quote = h.text.ifBlank { h.note }
                 val long = quote.length > 220
+                val shownQuote = remember(quote, gap, revealed, scheme) {
+                    androidx.compose.ui.text.buildAnnotatedString {
+                        if (gap == null) { append(quote); return@buildAnnotatedString }
+                        append(quote.substring(0, gap.start))
+                        val word = quote.substring(gap.start, gap.end)
+                        if (revealed) withStyle(androidx.compose.ui.text.SpanStyle(color = scheme.primary, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)) { append(word) }
+                        // The blank keeps the word's width, so nothing moves when it shows.
+                        else withStyle(androidx.compose.ui.text.SpanStyle(color = Color.Transparent, background = scheme.primary.copy(alpha = 0.16f))) { append(word) }
+                        append(quote.substring(gap.end))
+                    }
+                }
                 Surface(
                     shape = RoundedCornerShape(32.dp), color = scheme.surfaceContainerHigh,
                     border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.6f)),
@@ -257,7 +280,8 @@ fun ReviewSession(
                             verticalArrangement = Arrangement.spacedBy(22.dp),
                         ) {
                             Text(
-                                quote,
+                                shownQuote,
+                                modifier = if (gap != null && !revealed) Modifier.clickable { revealedAt = at } else Modifier,
                                 style = MaterialTheme.typography.headlineSmall.copy(
                                     fontFamily = FontFamily(Font(CoreR.font.newsreader)),
                                     fontSize = if (long) 21.sp else 27.sp, lineHeight = if (long) 31.sp else 39.sp,
@@ -278,7 +302,11 @@ fun ReviewSession(
                     }
                 }
             }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (gap != null && !revealed) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+                Button(onClick = { revealedAt = at }, modifier = Modifier.fillMaxWidth().height(56.dp), shapes = ButtonDefaults.shapes()) {
+                    Icon(Icons.Rounded.Visibility, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text("Show")
+                }
+            } else Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 androidx.compose.material3.OutlinedButton(
                     onClick = { decide(false) }, modifier = Modifier.weight(1f).height(56.dp), shape = RoundedCornerShape(50),
                     border = androidx.compose.foundation.BorderStroke(1.dp, scheme.outline),
@@ -329,8 +357,9 @@ fun ReviewSession(
                         }
                     }
                 } else if (item != null) {
+                    val hiding = recall && revealedAt != at && item.highlight.text.isNotBlank() && Cloze.pick(item.highlight.text) != null
                     Text(
-                        "Swipe right to keep, left to drop",
+                        if (hiding) "Think of the missing word, then tap Show" else "Swipe right to keep, left to drop",
                         style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant.copy(alpha = 0.7f),
                     )
                 }

@@ -186,6 +186,8 @@ data class AppSettings(
     val reviewHour: Int = 9,
     /** Cards in one Review round. 0 means no limit. */
     val reviewBatch: Int = 5,
+    /** Review hides a key word of each highlight, like a flashcard, until you tap Show. */
+    val reviewRecall: Boolean = true,
     /** Playback waits while a note on a highlight is being typed. */
     val pauseWhileNoting: Boolean = true,
     val recentSearches: List<String> = emptyList(),

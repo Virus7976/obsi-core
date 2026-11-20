@@ -91,6 +91,7 @@ fun AiPanel() {
         scope.launch {
             runCatching { Ai.models(store.value, prov) }
                 .onSuccess { list ->
+                    listError = null
                     lists[prov.id] = list
                     // A model the service does not have any more is swapped for its default.
                     val cur = store.value.models[prov.id]
@@ -124,8 +125,8 @@ fun AiPanel() {
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    if (c.ready && p != null) "Through ${p.title}. Used for answers in search, and for summaries and chapters when you ask for them."
-                    else "Optional. With a service, search can answer questions from your notes, and a transcript can get a summary and chapters.",
+                    if (c.ready && p != null) "Through ${p.title}. Used to find things by meaning in search, and to suggest tags."
+                    else "Optional. With a service, search finds your highlights by meaning, and tags are suggested when you add them.",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (c.ready) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
                 )
@@ -215,6 +216,34 @@ fun AiPanel() {
                     Text(text, style = MaterialTheme.typography.bodyMedium, color = if (ok) scheme.primary else scheme.error)
                 }
             }
+        }
+
+        // ---- tag ideas: by themselves, or on a tap
+        if (c.ready) {
+            Label("Tag ideas")
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(scheme.surfaceContainerHigh).padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                listOf("auto" to "By themselves", "ask" to "When I tap").forEach { (id, label) ->
+                    val on = c.tagIdeas == id
+                    Box(
+                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(if (on) scheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent)
+                            .clickable { store.update { it.copy(tagIdeas = id) } }.padding(vertical = 11.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            label, style = MaterialTheme.typography.labelLarge.copy(fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal),
+                            color = if (on) scheme.onSecondaryContainer else scheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            Text(
+                if (c.tagIdeas == "ask") "A small Suggest tags button sits under each tag field. Nothing is sent until you tap it."
+                else "When you add a quote, a few tags appear under it. Your own tags come first. Each quote is asked about once.",
+                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+            )
         }
 
         // ---- transcripts: only the apps that play

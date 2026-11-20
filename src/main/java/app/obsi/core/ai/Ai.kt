@@ -124,6 +124,8 @@ data class AiConfig(
     val urls: Map<String, String> = emptyMap(),
     /** The service that makes transcripts. Blank: the same as [provider] when it can, else none. */
     val speechProvider: String = "",
+    /** Tag ideas: "auto" shows them by themselves when you add a quote, "ask" waits for a tap. */
+    val tagIdeas: String = "auto",
     val updatedAt: Long = 0L,
 ) {
     val service: AiProvider? get() = AiProvider.of(provider)
@@ -172,6 +174,9 @@ object Ai {
 
     @Volatile private var store: AiStore? = null
     fun store(context: Context): AiStore = store ?: synchronized(this) { store ?: AiStore(context.applicationContext).also { store = it } }
+
+    /** Is a service set up? Readable anywhere, also outside a screen. */
+    val readyNow: Boolean get() = store?.value?.ready == true
 
     val http: OkHttpClient by lazy {
         OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(5, TimeUnit.MINUTES).callTimeout(6, TimeUnit.MINUTES).build()
@@ -251,7 +256,7 @@ object Ai {
         }
 
     /** A short test, so the setup page can say it works. */
-    suspend fun test(context: Context): String = ask(context, "Answer in at most five words.", "Say hello to a new user of a learning app.", fast = true, maxTokens = 2000)
+    suspend fun test(context: Context): String = ask(context, "Answer in at most five words.", "Say hello to a new user of a learning app.", fast = true, maxTokens = 300)
 
     private fun openAi(c: AiConfig, p: AiProvider, system: String, user: String, jsonOut: Boolean, maxTokens: Int): String {
         val model = c.model(p)

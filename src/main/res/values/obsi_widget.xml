@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="obsi_widget_bg">#FFF7F2FB</color>
+    <color name="obsi_widget_text">#FF1D1B20</color>
+    <color name="obsi_widget_muted">#FF5F5A68</color>
+    <color name="obsi_widget_accent">#FF6A4FB0</color>
+    <color name="obsi_widget_pill">#FFE9DFFA</color>
+    <color name="obsi_widget_rule">#FFB9A6E6</color>
+    <string name="obsi_widget_name">Highlight of the day</string>
+    <string name="obsi_widget_about">One of your highlights each day, with your streak and what is due for review.</string>
+    <string name="obsi_widget_sample_top">Today 42m  ·  5-day streak</string>
+    <string name="obsi_widget_sample_quote">“We are what we repeatedly do.”</string>
+    <string name="obsi_widget_sample_source">Your highlights  ·  every Obsi app</string>
+    <string name="obsi_widget_sample_review">3 to review</string>
+</resources>

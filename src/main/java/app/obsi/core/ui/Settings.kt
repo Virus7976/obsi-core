@@ -1,5 +1,6 @@
 package app.obsi.core.ui
 
+import androidx.compose.material.icons.rounded.DateRange
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Key
 import app.obsi.core.*
@@ -177,11 +178,12 @@ fun SettingsScreen(
         SettingsEntry("reading", "Reading", if (isTube) "Font, text size, the player" else "Font, text size, width", Icons.Rounded.MenuBook),
         SettingsEntry("highlights", "Highlights", "How words are marked and saved", Icons.Rounded.BorderColor),
         SettingsEntry("obsidian", "Obsidian", "Vaults, templates, what a clip adds", Icons.Rounded.Description),
+        SettingsEntry("weekly", "Weekly note", "Your week, written into your own weekly note", Icons.Rounded.DateRange),
         SettingsEntry("review", "Review", "Come back to old highlights", androidx.compose.material.icons.Icons.Rounded.Notifications),
         SettingsEntry("playback", "Playback and captions", "Autoplay, background, muting", Icons.Rounded.PlayCircle),
         SettingsEntry("lock", "Lock screen", "The player when the screen is off", Icons.Rounded.Lock),
         SettingsEntry("backup", "Backup", "Save every Obsi app to one file", androidx.compose.material.icons.Icons.Rounded.Backup),
-        SettingsEntry("ai", "AI service", "Optional. Your own key for answers and summaries", Icons.Rounded.Key),
+        SettingsEntry("ai", "AI service", "Optional. Find by meaning and tag ideas", Icons.Rounded.Key),
         SettingsEntry("updates", "Updates", "Check for and install new versions", Icons.Rounded.SystemUpdate),
         SettingsEntry("whatsnew", "What's new", "What changed in each version", Icons.Rounded.NewReleases),
         SettingsEntry("advanced", "Advanced", "Caption client versions", Icons.Rounded.Tune),
@@ -427,8 +429,9 @@ fun SettingsScreen(
                 )
             } }
 
+            if (show("weekly", "weekly note week periodic notes calendar journals templater template summary obsidian")) item { Group("Weekly note") { WeeklyPanel() } }
             if (show("backup", "backup restore save file new phone export import move")) item { Group("Backup") { BackupPanel() } }
-            if (show("ai", "ai service key model openrouter openai anthropic claude gemini groq mistral deepseek ollama grok transcript summary chapters ask answer")) item { Group("AI service") { AiPanel() } }
+            if (show("ai", "ai service key model openrouter openai anthropic claude gemini groq mistral deepseek ollama grok transcript meaning find tags")) item { Group("AI service") { AiPanel() } }
             if (show("updates", SettingsKeys.updates)) item { UpdateGroup(s, ::set) }
 
             // ---------- obsidian ----------
@@ -705,6 +708,7 @@ fun SettingsScreen(
                     listOf("5" to "5", "10" to "10", "20" to "20", "0" to "No limit"),
                     s.reviewBatch.toString(),
                 ) { v -> set { it.copy(reviewBatch = v.toInt()) } }
+                SwitchRow("Hide a key word", "Each highlight shows with one word blanked out. Think of it, then tap Show. It helps you remember.", s.reviewRecall) { v -> set { it.copy(reviewRecall = v) } }
             } }
 
             // ---------- playback ----------

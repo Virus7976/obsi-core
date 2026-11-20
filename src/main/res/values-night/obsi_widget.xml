@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="obsi_widget_bg">#FF1F1C25</color>
+    <color name="obsi_widget_text">#FFECE6F2</color>
+    <color name="obsi_widget_muted">#FFB4ADBF</color>
+    <color name="obsi_widget_accent">#FFCDB8FF</color>
+    <color name="obsi_widget_pill">#FF3A3149</color>
+    <color name="obsi_widget_rule">#FF7C64C2</color>
+</resources>
