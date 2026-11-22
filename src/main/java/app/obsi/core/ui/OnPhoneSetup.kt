@@ -187,7 +187,7 @@ internal fun OnPhoneSection() {
 }
 
 /**
- * The apps allowed to use this phone's model, like Obsidian's Obsi Clips. They link from their own
+ * The apps allowed to use this phone's model, like the Clips plugin in Obsidian. They link from their own
  * setup; here the person sees them, and can stop or remove them.
  */
 @Composable
@@ -202,7 +202,7 @@ private fun LinkedApps() {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(scheme.surfaceContainerHigh)) {
         if (links.isEmpty()) {
             Text(
-                "Apps like Obsidian can use this model too. In Obsidian, open Obsi Clips' settings, AI, and pick Model in an Obsi app. You are asked here first.",
+                "Apps like Obsidian can use this model too. In Obsidian, open the Clips plugin's settings, AI, and pick Model in an Obsi app. You are asked here first.",
                 style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             )

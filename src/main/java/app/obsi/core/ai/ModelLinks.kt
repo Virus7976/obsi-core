@@ -10,7 +10,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import java.security.MessageDigest
 import java.security.SecureRandom
 
-/** An app the person allowed to use the phone's model, like Obsidian's Obsi Clips. */
+/** An app the person allowed to use the phone's model, like the Clips plugin in Obsidian. */
 @Serializable
 data class ModelLink(val name: String, val hash: String, val added: Long, val used: Long = 0)
 
