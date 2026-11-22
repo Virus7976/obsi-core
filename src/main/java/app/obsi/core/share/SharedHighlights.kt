@@ -81,7 +81,11 @@ object SharedHighlights {
 
 /** Hands this app's highlights to the other Obsi apps. Read only. */
 class SharedHighlightsProvider : ContentProvider() {
-    override fun onCreate(): Boolean = true
+    override fun onCreate(): Boolean {
+        // Runs at app start in every Obsi app: the model bridge starts each time the app comes to the front.
+        (context?.applicationContext as? android.app.Application)?.let { app.obsi.core.ai.ModelBridgeService.watch(it) }
+        return true
+    }
 
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, selectionArgs: Array<out String>?, sortOrder: String?): Cursor? {
         if (uri.lastPathSegment == "setup") return SharedSetup.cursor()

@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.obsi.core.Brand
 import app.obsi.core.ai.Ai
+import app.obsi.core.ai.ModelBridgeService
+import app.obsi.core.ai.ModelLinks
 import app.obsi.core.ai.OnPhone
 import app.obsi.core.ai.PhoneModel
 import com.google.mlkit.genai.common.FeatureStatus
@@ -180,6 +182,56 @@ internal fun OnPhoneSection() {
             if (testing) { Spacer(Modifier.width(12.dp)); CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
         }
         test?.let { (ok, text) -> Text(text, style = MaterialTheme.typography.bodyMedium, color = if (ok) scheme.primary else scheme.error) }
+        LinkedApps()
+    }
+}
+
+/**
+ * The apps allowed to use this phone's model, like Obsidian's Obsi Clips. They link from their own
+ * setup; here the person sees them, and can stop or remove them.
+ */
+@Composable
+private fun LinkedApps() {
+    val ctx = LocalContext.current
+    val links by ModelLinks.links.collectAsState()
+    val on by ModelBridgeService.on.collectAsState()
+    LaunchedEffect(Unit) { ModelLinks.load(ctx) }
+    val scheme = MaterialTheme.colorScheme
+
+    Label("Other apps on this phone")
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(scheme.surfaceContainerHigh)) {
+        if (links.isEmpty()) {
+            Text(
+                "Apps like Obsidian can use this model too. In Obsidian, open Obsi Clips' settings, AI, and pick Model in an Obsi app. You are asked here first.",
+                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            )
+            return@Column
+        }
+        links.forEachIndexed { i, l ->
+            if (i > 0) HorizontalDivider(Modifier.padding(start = 16.dp), color = scheme.outlineVariant.copy(alpha = 0.5f))
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(l.name, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        if (l.used > 0) "Last used " + android.text.format.DateUtils.getRelativeTimeSpanString(l.used) else "Not used yet",
+                        style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = {
+                    ModelLinks.remove(ctx, l)
+                    if (ModelLinks.load(ctx).isEmpty()) ModelBridgeService.stop(ctx)
+                }) { Text("Remove") }
+            }
+        }
+        HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.5f))
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (on) "On now. It stops after 20 minutes unused." else "Off now. It starts when you open ${Brand.name}.",
+                style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f),
+            )
+            TextButton(onClick = { if (on) ModelBridgeService.stop(ctx) else ModelBridgeService.start(ctx) }) { Text(if (on) "Stop" else "Start") }
+        }
     }
 }
 

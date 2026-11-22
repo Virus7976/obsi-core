@@ -25,7 +25,40 @@
         <package android:name="app.obsilearn" />
     </queries>
 
+    <!-- Lending the phone's AI model to Obsidian needs a small notification while it is on. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
     <application>
+        <!--
+        The AI model bridge: answers apps the person linked, on 127.0.0.1 only. Not exported, so no
+        other app can start or stop it.
+        -->
+        <service
+            android:name="app.obsi.core.ai.ModelBridgeService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Lets apps the user linked, like Obsidian, use the on-device AI model over 127.0.0.1." />
+        </service>
+
+        <!-- Asks the person before another app may use the model. -->
+        <activity
+            android:name="app.obsi.core.ui.ModelLinkActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="obsi-ai" android:host="link" />
+            </intent-filter>
+        </activity>
+
         <!-- The phone's graphics chip runs an AI model much faster. Not every phone has these. -->
         <uses-native-library android:name="libvndksupport.so" android:required="false" />
         <uses-native-library android:name="libOpenCL.so" android:required="false" />
