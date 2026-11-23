@@ -133,4 +133,40 @@ object Highlights {
     /** Does any highlight touch words i0..i1? Decides whether a drag paints or erases. */
     fun touches(current: List<Highlight>, words: List<Word>, i0: Int, i1: Int): Boolean =
         colorByWord(words, current).let { c -> (i0..i1).any { c.getOrElse(it) { -1 } >= 0 } }
+
+    /**
+     * The page's words changed (a file shown cleaner, a page read again): each highlight whose words no longer
+     * match is moved to where its own text is now, the nearest place to where it was. One that cannot be found
+     * stays as it is. Null when nothing moved, so nothing needs saving.
+     */
+    fun reanchor(current: List<Highlight>, wordTexts: List<String>): List<Highlight>? {
+        if (current.none { it.w0 >= 0 }) return null
+        val toks = ArrayList<String>()
+        val owner = ArrayList<Int>()
+        wordTexts.forEachIndexed { i, w -> tokens(w).forEach { toks += it; owner += i } }
+        var moved = false
+        val out = current.map { h ->
+            if (h.w0 < 0) return@map h
+            val want = tokens(h.text)
+            if (want.isEmpty()) return@map h
+            val here = if (h.w1 in h.w0 until wordTexts.size) (h.w0..h.w1).flatMap { tokens(wordTexts[it]) } else null
+            if (here == want) return@map h
+            var best = -1
+            var bestGap = Int.MAX_VALUE
+            for (s in 0..toks.size - want.size) {
+                if (toks[s] != want[0]) continue
+                if ((1 until want.size).all { toks[s + it] == want[it] }) {
+                    val gap = kotlin.math.abs(owner[s] - h.w0)
+                    if (gap < bestGap) { best = s; bestGap = gap }
+                }
+            }
+            if (best < 0) return@map h
+            moved = true
+            h.copy(w0 = owner[best], w1 = owner[best + want.size - 1])
+        }
+        return if (moved) out else null
+    }
+
+    private val notWord = Regex("[^\\p{L}\\p{N}]+")
+    private fun tokens(s: String) = s.lowercase().split(notWord).filter { it.isNotEmpty() }
 }
