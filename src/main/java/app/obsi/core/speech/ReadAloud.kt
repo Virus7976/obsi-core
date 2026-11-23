@@ -415,8 +415,28 @@ class ReadAloud private constructor(private val app: Context) {
 
     fun clearError() = _ui.update { it.copy(error = null) }
 
+    /** The document being read now, if any. */
+    val current: ListenDoc? get() = doc
+
+    /**
+     * Set by an app with a queue. Called when [finished] has been read to the end. It gives back what to read
+     * next and the paragraph to start at, or null to stop.
+     */
+    var upNext: (suspend (finished: String) -> Pair<ListenDoc, Int>?)? = null
+
     private fun onEnded() {
+        val stopHere = _ui.value.sleepMinutes == SLEEP_END
         _ui.update { it.copy(playing = false, sleepMinutes = if (it.sleepMinutes == SLEEP_END) 0 else it.sleepMinutes) }
+        val d = doc ?: return
+        val next = upNext ?: return
+        if (stopHere) return
+        main.launch {
+            val (n, para) = withContext(Dispatchers.IO) { runCatching { next(d.id) }.getOrNull() } ?: return@launch
+            // Something else may have started while the next one loaded.
+            if (doc?.id != d.id || player.playbackState != Player.STATE_ENDED) return@launch
+            val v = pickVoice(n.locale) ?: return@launch
+            start(n, para, v, play = true)
+        }
     }
 
     private fun onError(e: PlaybackException) {
