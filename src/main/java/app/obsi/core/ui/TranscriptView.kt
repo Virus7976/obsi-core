@@ -569,8 +569,22 @@ class TranscriptView(context: Context) : ScrollView(context) {
     /** Called when a word is tapped. Return true to say it was handled, so the view does not seek. */
     var onTapWord: (Int) -> Boolean = { false }
 
+    /**
+     * Paused because you picked words to highlight. Following then waits for Sync and never comes back by
+     * itself, so the page stays on what you marked while the voice reads on.
+     */
+    private var held = false
+
     private fun setPaused(v: Boolean) {
+        if (!v) held = false
         if (paused != v) { paused = v; onAway(v) }
+    }
+
+    /** Words were picked while the voice reads: stop following until Sync. */
+    private fun hold() {
+        if (activeIdx < 0) return
+        held = true
+        setPaused(true)
     }
 
     private fun yOfWord(word: Int): Int? {
@@ -770,8 +784,10 @@ class TranscriptView(context: Context) : ScrollView(context) {
         val d = doc ?: return
         if (word !in d.words.indices) return
         if (searching) return
-        if (tv.hasSelection()) { setPaused(true); return }
+        // Picked words, or an open highlight with its handles: the page stays put for you.
+        if (tv.hasSelection() || pinned != null) { hold(); return }
         if (paused) {
+            if (held) return
             // Follow again only if the reader scrolled so the spoken word sits where it would be put anyway.
             val wy = yOfWord(word)
             val comfy = wy != null && wy >= scrollY + height * 0.12f && wy <= scrollY + height * 0.62f
@@ -875,6 +891,7 @@ class TranscriptView(context: Context) : ScrollView(context) {
     private fun selectionCallback() = object : ActionMode.Callback2() {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             if (style?.highlighterOn == false) return false
+            hold()
             expand(style?.holdSelects ?: "word")
             menu.clear()
             // One button to highlight. The colour is picked afterwards, in the note bar.
