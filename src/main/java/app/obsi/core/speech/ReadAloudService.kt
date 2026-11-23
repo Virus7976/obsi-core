@@ -17,7 +17,7 @@ import com.google.common.util.concurrent.ListenableFuture
 /**
  * Keeps read aloud going with the screen off, and draws the media notification and the lock screen
  * controls: back a sentence, play or pause, next sentence. Headphone and car buttons do the same.
- * Every Obsi app gets it through the core's manifest; nothing to set up in the app.
+ * Each app that reads aloud declares it in its own manifest (ObsiTube and the others have their own player service).
  */
 class ReadAloudService : MediaSessionService() {
     private var session: MediaSession? = null
