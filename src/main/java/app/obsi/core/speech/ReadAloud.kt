@@ -236,7 +236,7 @@ class ReadAloud private constructor(private val app: Context) {
         val d = doc
         val at = _ui.value.line
         _ui.update { it.copy(voice = v) }
-        if (d != null && _ui.value.active) start(d, lines.getOrNull(at)?.para ?: 0, v, play = player.playWhenReady)
+        if (d != null && _ui.value.active) start(d, paraAt(at), v, play = player.playWhenReady)
         d?.let { refreshKeep(it) }
     }
 
@@ -271,9 +271,14 @@ class ReadAloud private constructor(private val app: Context) {
     // ---------- playing ----------
 
     /** Reads [d] from paragraph [fromPara]. If [d] is already playing, it jumps there instead. */
-    fun play(d: ListenDoc, fromPara: Int = 0, fromChar: Int = 0) {
+    /**
+     * Reads [d] from paragraph [fromPara] (and character [fromChar] in it). [inQueue]: it is played from the
+     * app's queue, so its title is said first when the person asked for that.
+     */
+    fun play(d: ListenDoc, fromPara: Int = 0, fromChar: Int = 0, inQueue: Boolean = false) {
         val voice = pickVoice(d.locale) ?: return
         if (fromChar > 0) { start(d, fromPara, voice, play = true, fromChar = fromChar); return }
+        if (inQueue && !(_ui.value.active && doc?.id == d.id)) { start(d, fromPara, voice, play = true, announce = prefs.sayTitle); return }
         if (_ui.value.active && doc?.id == d.id && doc?.paras == d.paras && lineVoice?.id == voice.id) {
             seekToPara(fromPara)
             if (!player.playWhenReady) player.play()
@@ -282,9 +287,15 @@ class ReadAloud private constructor(private val app: Context) {
         start(d, fromPara, voice, play = true)
     }
 
-    private fun start(d: ListenDoc, fromPara: Int, voice: SpeakerVoice, play: Boolean, fromChar: Int = 0) {
-        val pieces = splitAt(cut(d), fromPara, fromChar)
-        if (pieces.isEmpty()) { _ui.update { it.copy(error = "There is nothing to read here.") }; return }
+    private fun start(d: ListenDoc, fromPara: Int, voice: SpeakerVoice, play: Boolean, fromChar: Int = 0, announce: Boolean = false) {
+        val body = splitAt(cut(d), fromPara, fromChar)
+        if (body.isEmpty()) { _ui.update { it.copy(error = "There is nothing to read here.") }; return }
+        val at = body.indexOfFirst { it.para > fromPara || (it.para == fromPara && it.offset + it.text.length > fromChar) }.coerceAtLeast(0)
+        // The title goes just before where reading starts, so you hear where one article ends and the next begins.
+        // It is in no paragraph (-1), so nothing on the page lights up for it.
+        val title = listOf(d.title.trim().trimEnd('.'), d.source.trim().takeIf { it.isNotBlank() }?.let { "from $it" })
+            .filterNotNull().filter { it.isNotBlank() }.joinToString(", ")
+        val pieces = if (announce && title.isNotBlank()) body.take(at) + Line(d.id, -1, 0, "$title.") + body.drop(at) else body
         doc = d
         lines = pieces
         lineVoice = voice
@@ -297,7 +308,7 @@ class ReadAloud private constructor(private val app: Context) {
         val items = pieces.indices.map { i ->
             MediaItem.Builder().setUri(Uri.parse("listen://line/${d.id.hashCode()}/$i")).setMediaId("$i").setMediaMetadata(meta).build()
         }
-        val first = pieces.indexOfFirst { it.para > fromPara || (it.para == fromPara && it.offset + it.text.length > fromChar) }.coerceAtLeast(0)
+        val first = at
         player.setMediaItems(items, first, 0L)
         player.setPlaybackSpeed(prefs.speed)
         _ui.value = _ui.value.copy(
@@ -309,6 +320,9 @@ class ReadAloud private constructor(private val app: Context) {
         if (play) player.play()
         connectSession()
     }
+
+    /** The paragraph of line [i]. The spoken title is in none, so it gives the paragraph after it. */
+    private fun paraAt(i: Int): Int = lines.drop(i.coerceAtLeast(0)).firstOrNull { it.para >= 0 }?.para ?: 0
 
     private fun cut(d: ListenDoc): List<Line> =
         // A skipped part stays as spaces, so each line keeps its length and the lit word lines up.
@@ -449,7 +463,7 @@ class ReadAloud private constructor(private val app: Context) {
             // Something else may have started while the next one loaded.
             if (doc?.id != d.id || (!skipped && player.playbackState != Player.STATE_ENDED)) return@launch
             val v = pickVoice(n.locale) ?: return@launch
-            start(n, para, v, play = true)
+            start(n, para, v, play = true, announce = prefs.sayTitle)
         }
     }
 
@@ -462,7 +476,7 @@ class ReadAloud private constructor(private val app: Context) {
             val fallback = _voices.value.firstOrNull { it.kind == VoiceKind.PHONE && it.language == v.language }
                 ?: _voices.value.firstOrNull { it.kind == VoiceKind.PHONE }
             if (fallback != null) {
-                val at = lines.getOrNull(player.currentMediaItemIndex)?.para ?: 0
+                val at = paraAt(player.currentMediaItemIndex)
                 start(d, at, fallback, play = true)
                 _ui.update { it.copy(error = (cause ?: "${v.name} did not answer.") + " Reading with ${fallback.name} for now.") }
                 return
@@ -763,6 +777,10 @@ class ListenPrefs(context: Context) {
     var followAlong: Boolean
         get() = p.getBoolean("followAlong", true)
         set(v) = p.edit().putBoolean("followAlong", v).apply()
+    /** Say each article's title before it, when it plays from the queue. */
+    var sayTitle: Boolean
+        get() = p.getBoolean("sayTitle", true)
+        set(v) = p.edit().putBoolean("sayTitle", v).apply()
     /** The parts of a page that are not read, by [SkipPart.key]. */
     var skip: Set<String>
         get() = p.getStringSet("skip", null) ?: SkipPart.entries.filter { it.default }.map { it.key }.toSet()

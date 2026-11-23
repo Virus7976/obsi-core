@@ -630,6 +630,7 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
     var wifiOnly by remember { mutableStateOf(p.wifiOnly) }
     var highlight by remember { mutableStateOf(p.highlightWords) }
     var follow by remember { mutableStateOf(p.followAlong) }
+    var sayTitle by remember { mutableStateOf(p.sayTitle) }
     var skip by remember { mutableStateOf(p.skip) }
     var confirmDelete by remember { mutableStateOf(false) }
     fun parent(of: String) = if (of == "saved") "offline" else "main"
@@ -696,6 +697,7 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
                 Column(Modifier.padding(horizontal = 20.dp)) {
                     SwitchRow("Light up each word", "The word being read is marked on the page.", highlight) { highlight = it; p.highlightWords = it }
                     SwitchRow("Follow along", "The page scrolls with the voice.", follow) { follow = it; p.followAlong = it }
+                    SwitchRow("Say the title", "In Up next, each article starts with its title, so you hear where a new one begins.", sayTitle) { sayTitle = it; p.sayTitle = it }
                 }
             }
             else -> {
