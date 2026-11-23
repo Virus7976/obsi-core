@@ -459,6 +459,12 @@ class TranscriptView(context: Context) : ScrollView(context) {
         isVerticalFadingEdgeEnabled = true
         setFadingEdgeLength(dp(26))
         tv.setTextIsSelectable(true)
+        // Keep the page as it was built. The default copy is a plain SpannableString, which finds its styles by
+        // reading every one of them: on a long page with thousands of links, laying it out froze the screen for
+        // seconds. The builder looks them up in a tree.
+        tv.setSpannableFactory(object : Spannable.Factory() {
+            override fun newSpannable(source: CharSequence): Spannable = source as? SpannableStringBuilder ?: SpannableStringBuilder(source)
+        })
         tv.customSelectionActionModeCallback = selectionCallback()
         tv.setPadding(dp(18), dp(10), dp(18), dp(160))
         tv.setOnTouchListener { _, ev ->
@@ -489,7 +495,12 @@ class TranscriptView(context: Context) : ScrollView(context) {
         imageWidth: Int = 0,
     ) {
         val docChanged = newDoc !== doc
-        val styleChanged = s != style || styles !== lastStyles || images !== lastImages
+        val onlyPictures = !docChanged && s == style && styles === lastStyles && images !== lastImages && imageWidth == lastImageWidth
+        // New pictures arrived: put each one in its place. The page is laid out again only around it, not
+        // from the top, which on a long article took over a second for every batch of pictures.
+        if (onlyPictures && updatePictures(images)) { lastImages = images; return }
+        val styleChanged = s != style || styles !== lastStyles || images !== lastImages || imageWidth != lastImageWidth
+        lastImageWidth = imageWidth
         doc = newDoc
         style = s
         lastStyles = styles
@@ -535,6 +546,24 @@ class TranscriptView(context: Context) : ScrollView(context) {
             post { scrollTo(0, keepY) }
             if (colors.isNotEmpty()) ownRuns?.let { applyHighlights(colors, it) } ?: applyHighlights(colors)
         }
+    }
+
+    private var lastImageWidth = 0
+
+    /** Swaps in the pictures that changed. False when the text is not ready for it, so it is built again. */
+    private fun updatePictures(images: Map<Int, android.graphics.Bitmap?>): Boolean {
+        val t = tv.text as? Spannable ?: return false
+        val old = lastImages
+        val density = resources.displayMetrics.density
+        for (i in (old.keys + images.keys)) {
+            if (old.containsKey(i) == images.containsKey(i) && old[i] === images[i]) continue
+            if (i < 0 || i >= t.length) return false
+            t.getSpans(i, i + 1, ImageBlock::class.java).forEach { t.removeSpan(it) }
+            t.getSpans(i, i + 1, HiddenSpan::class.java).forEach { t.removeSpan(it) }
+            if (images.containsKey(i)) t.setSpan(ImageBlock(images[i], lastImageWidth, density), i, i + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            else t.setSpan(HiddenSpan(), i, i + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return true
     }
 
     override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {

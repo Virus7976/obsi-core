@@ -174,6 +174,7 @@ private fun nextSpeed(x: Float) = SPEEDS.firstOrNull { it > x + 0.01f } ?: SPEED
  * calm. [doc] is what this screen would read; [fromPara] where to start when nothing is playing.
  */
 @Composable
+/** [fromPara]: the paragraph you are reading now, or -1 when this screen shows no text. */
 fun ListenSheet(engine: ReadAloud, doc: ListenDoc?, fromPara: () -> Int, onDismiss: () -> Unit) {
     val u by engine.ui.collectAsState()
     val keeps by engine.keeps.collectAsState()
@@ -239,7 +240,15 @@ fun ListenSheet(engine: ReadAloud, doc: ListenDoc?, fromPara: () -> Int, onDismi
                 Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { engine.previous() }, enabled = here, modifier = Modifier.size(64.dp)) { Icon(Icons.Rounded.SkipPrevious, "Back a sentence", Modifier.size(36.dp)) }
                     FilledIconButton(
-                        onClick = { if (here) engine.toggle() else doc?.let { engine.play(it, fromPara()) } },
+                        onClick = {
+                            // Paused, and you read on since: it starts where you are now, not where the voice stopped.
+                            val want = fromPara()
+                            when {
+                                here && !u.playing && want >= 0 && kotlin.math.abs(want - u.para) > 1 -> doc?.let { engine.play(it, want) }
+                                here -> engine.toggle()
+                                else -> doc?.let { engine.play(it, want.coerceAtLeast(0)) }
+                            }
+                        },
                         modifier = Modifier.size(80.dp),
                         colors = IconButtonDefaults.filledIconButtonColors(containerColor = scheme.primary),
                     ) {

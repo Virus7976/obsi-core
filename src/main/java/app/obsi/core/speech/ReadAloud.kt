@@ -290,7 +290,8 @@ class ReadAloud private constructor(private val app: Context) {
     private fun start(d: ListenDoc, fromPara: Int, voice: SpeakerVoice, play: Boolean, fromChar: Int = 0, announce: Boolean = false) {
         val body = splitAt(cut(d), fromPara, fromChar)
         if (body.isEmpty()) { _ui.update { it.copy(error = "There is nothing to read here.") }; return }
-        val at = body.indexOfFirst { it.para > fromPara || (it.para == fromPara && it.offset + it.text.length > fromChar) }.coerceAtLeast(0)
+        // Starting in a skipped part (the sources at the end) reads the last part before it, never the top.
+        val at = body.indexOfFirst { it.para > fromPara || (it.para == fromPara && it.offset + it.text.length > fromChar) }.let { if (it < 0) body.lastIndex else it }
         // The title goes just before where reading starts, so you hear where one article ends and the next begins.
         // It is in no paragraph (-1), so nothing on the page lights up for it.
         val title = listOf(d.title.trim().trimEnd('.'), d.source.trim().takeIf { it.isNotBlank() }?.let { "from $it" })
@@ -713,6 +714,9 @@ class ReadAloud private constructor(private val app: Context) {
         keptRoot.listFiles().orEmpty().forEach { it.deleteRecursively() }
         _keeps.value = emptyMap()
     }
+
+    /** True when some audio of [docId] is kept on the phone. Reads the disk: call it off the main thread. */
+    fun hasKept(docId: String): Boolean = keptDir(docId).listFiles().orEmpty().any { it.extension in setOf("m4a", "mp3", "wav") }
 
     /** How many articles have audio on the phone. */
     fun keptCount(): Int = keptRoot.listFiles().orEmpty().count { d -> d.isDirectory && d.listFiles().orEmpty().any { it.extension in setOf("m4a", "mp3", "wav") } }

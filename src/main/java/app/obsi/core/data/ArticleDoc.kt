@@ -23,6 +23,18 @@ import org.jsoup.nodes.TextNode
 object ArticleDoc {
     class Built(val doc: TranscriptDoc, val styles: List<Styled>, val images: List<Pair<Int, String>>)
 
+    /** The last few pages built, so opening an article again, or listening to it, skips the build. */
+    private val recent = object : LinkedHashMap<String, Built>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Built>?) = size > 4
+    }
+
+    /** [build], kept for the last few pages. [id] names the article; a changed page is built again. */
+    fun cached(id: String, html: String, title: String = "", byline: String = "", lead: String = ""): Built {
+        val key = "$id|${html.length}|${html.hashCode()}|$title|$byline|$lead"
+        synchronized(recent) { recent[key] }?.let { return it }
+        return build(html, title, byline, lead).also { synchronized(recent) { recent[key] = it } }
+    }
+
     /** Stands in for a picture in the text. The reader draws the picture there. */
     const val IMAGE_CHAR = Styled.IMAGE_CHAR
 

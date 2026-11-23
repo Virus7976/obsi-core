@@ -15,21 +15,27 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Loads an article's pictures after its text, a few at a time. The page is laid out again each time a
- * batch is in. A picture that fails is left out, so it leaves no empty box.
+ * An article's pictures, by their place in the text. Null until the first set is ready: the page waits for it
+ * (a short time at most), so it is laid out once with its pictures in. Every picture that comes in later is
+ * added in one more step at the end. On a long page each step costs the phone a lot, so there are at most two.
+ * A picture that fails is left out, so it leaves no empty box. A picture still loading is a grey box.
  */
 @Composable
-fun rememberPictures(built: ArticleDoc.Built?, imageWidth: Int): Map<Int, Bitmap?> {
+fun rememberPicturesReady(built: ArticleDoc.Built?, imageWidth: Int, waitMs: Long = 900): Map<Int, Bitmap?>? {
     val ctx = LocalContext.current
-    var pictures by remember(built) { mutableStateOf<Map<Int, Bitmap?>>(built?.images?.associate { it.first to null }.orEmpty()) }
+    var pictures by remember(built) {
+        mutableStateOf<Map<Int, Bitmap?>?>(if (built != null && built.images.isEmpty()) emptyMap() else null)
+    }
     LaunchedEffect(built) {
         val list = built?.images ?: return@LaunchedEffect
         if (list.isEmpty()) return@LaunchedEffect
         val loader = coil3.SingletonImageLoader.get(ctx)
         val got = java.util.concurrent.ConcurrentHashMap<Int, Bitmap>()
         val failed = java.util.concurrent.ConcurrentHashMap.newKeySet<Int>()
+        fun now() = list.filter { it.first !in failed }.associate { it.first to got[it.first] }
         coroutineScope {
             list.forEach { (at, url) ->
                 launch(Dispatchers.IO) {
@@ -39,18 +45,21 @@ fun rememberPictures(built: ArticleDoc.Built?, imageWidth: Int): Map<Int, Bitmap
                     if (bmp != null) got[at] = bmp else failed += at
                 }
             }
-            // Show what has arrived every so often, so one slow picture does not hold the others back.
             launch {
-                var shown = 0
-                while (true) {
-                    delay(500)
-                    if (got.size != shown) { shown = got.size; pictures = list.associate { it.first to got[it.first] } }
-                    if (shown + failed.size >= list.size) break
-                }
+                // Saved pictures come off the phone in a moment. Wait for them, but not for a slow network.
+                withTimeoutOrNull(waitMs) { while (got.size + failed.size < list.size) delay(25) }
+                val first = now()
+                pictures = first
+                while (got.size + failed.size < list.size) delay(250)
+                val last = now()
+                if (last.keys != first.keys || last.any { (k, v) -> first[k] !== v }) pictures = last
             }
         }
-        pictures = list.filter { it.first !in failed }.associate { it.first to got[it.first] }
     }
     return pictures
 }
 
+/** [rememberPicturesReady] for a page that does not wait: grey boxes until the pictures are in. */
+@Composable
+fun rememberPictures(built: ArticleDoc.Built?, imageWidth: Int): Map<Int, Bitmap?> =
+    rememberPicturesReady(built, imageWidth, waitMs = 0) ?: built?.images?.associate { it.first to null }.orEmpty()
