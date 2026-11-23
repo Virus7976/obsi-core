@@ -28,6 +28,9 @@
     <!-- Lending the phone's AI model to Obsidian needs a small notification while it is on. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Read aloud keeps playing with the screen off, with controls on the lock screen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application>
         <!--

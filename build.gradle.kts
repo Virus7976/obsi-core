@@ -60,6 +60,10 @@ dependencies {
     // AI on the phone: Gemini Nano where the phone has it, else a downloaded model file.
     implementation("com.google.mlkit:genai-prompt:1.0.0-beta5")
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
+    // Read aloud: one player for every voice, with the lock screen and notification controls.
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-session:1.8.0")
+    implementation("androidx.media3:media3-common:1.8.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.5")
     testImplementation("junit:junit:4.13.2")
 }
