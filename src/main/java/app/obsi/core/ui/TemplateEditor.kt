@@ -104,6 +104,7 @@ fun TemplateEditorScreen(id: String, onBack: () -> Unit) {
         value = withContext(Dispatchers.IO) { runCatching { app.sampleVariables(s) }.getOrDefault(emptyMap()) }
     }
     var editing by remember { mutableStateOf<String?>(null) }
+    var newProp by remember { mutableStateOf<String?>(null) }
     // Which text dialog is open: "name", "noteName", "folder", "vault" or "content".
     var dialog by remember { mutableStateOf<String?>(null) }
     var more by remember { mutableStateOf(false) }
@@ -168,6 +169,7 @@ fun TemplateEditorScreen(id: String, onBack: () -> Unit) {
                     // It starts with no name, so the sheet shows the names your vault already uses.
                     edit { it.copy(properties = it.properties + TemplateProperty(pid, "", "", "")) }
                     editing = pid
+                    newProp = pid
                 }
             }
         }
@@ -212,6 +214,7 @@ fun TemplateEditorScreen(id: String, onBack: () -> Unit) {
     t.properties.firstOrNull { it.id == editing }?.let { p ->
         PropertyRuleSheet(
             p = p, vars = vars, vault = s.linkedVault(s.vault) ?: s.vaultFolders.keys.firstOrNull(),
+            taken = t.properties.filter { it.id != p.id }.map { it.name.trim().lowercase() }.toSet(),
             onChange = { block -> editProp(p.id, block) },
             onRemove = {
                 editing = null
@@ -219,8 +222,13 @@ fun TemplateEditorScreen(id: String, onBack: () -> Unit) {
             },
             onDismiss = {
                 editing = null
-                // A property left with no name was never really added.
-                if (p.name.isBlank()) edit { it.copy(properties = it.properties.filterNot { x -> x.id == p.id }) }
+                // A property left with no name was never really added. Read the saved one, not the one this
+                // sheet opened with: the name typed since then is only in the saved one.
+                val now = app.settings.state.value.templates.firstOrNull { it.id == id }?.properties?.firstOrNull { it.id == p.id }
+                // A new property given a name the template already has would make the note break: drop it too.
+                val twice = now != null && newProp == p.id && t.properties.any { it.id != p.id && it.name.trim().equals(now.name.trim(), true) }
+                newProp = null
+                if (now != null && (now.name.isBlank() || twice)) edit { it.copy(properties = it.properties.filterNot { x -> x.id == p.id }) }
             },
         )
     }

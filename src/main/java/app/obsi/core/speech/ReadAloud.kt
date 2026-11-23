@@ -57,6 +57,8 @@ data class ListenDoc(
     val source: String,
     val paras: List<String>,
     val locale: String = "en-US",
+    /** What kind of text each part is (heading, caption, footnote number), so it can be skipped. */
+    val marks: List<ListenMark> = emptyList(),
 )
 
 /** What the player bar and the listen sheet show. */
@@ -265,8 +267,9 @@ class ReadAloud private constructor(private val app: Context) {
     // ---------- playing ----------
 
     /** Reads [d] from paragraph [fromPara]. If [d] is already playing, it jumps there instead. */
-    fun play(d: ListenDoc, fromPara: Int = 0) {
+    fun play(d: ListenDoc, fromPara: Int = 0, fromChar: Int = 0) {
         val voice = pickVoice(d.locale) ?: return
+        if (fromChar > 0) { start(d, fromPara, voice, play = true, fromChar = fromChar); return }
         if (_ui.value.active && doc?.id == d.id && doc?.paras == d.paras && lineVoice?.id == voice.id) {
             seekToPara(fromPara)
             if (!player.playWhenReady) player.play()
@@ -275,8 +278,8 @@ class ReadAloud private constructor(private val app: Context) {
         start(d, fromPara, voice, play = true)
     }
 
-    private fun start(d: ListenDoc, fromPara: Int, voice: SpeakerVoice, play: Boolean) {
-        val pieces = cut(d)
+    private fun start(d: ListenDoc, fromPara: Int, voice: SpeakerVoice, play: Boolean, fromChar: Int = 0) {
+        val pieces = splitAt(cut(d), fromPara, fromChar)
         if (pieces.isEmpty()) { _ui.update { it.copy(error = "There is nothing to read here.") }; return }
         doc = d
         lines = pieces
@@ -290,7 +293,7 @@ class ReadAloud private constructor(private val app: Context) {
         val items = pieces.indices.map { i ->
             MediaItem.Builder().setUri(Uri.parse("listen://line/${d.id.hashCode()}/$i")).setMediaId("$i").setMediaMetadata(meta).build()
         }
-        val first = pieces.indexOfFirst { it.para >= fromPara }.coerceAtLeast(0)
+        val first = pieces.indexOfFirst { it.para > fromPara || (it.para == fromPara && it.offset + it.text.length > fromChar) }.coerceAtLeast(0)
         player.setMediaItems(items, first, 0L)
         player.setPlaybackSpeed(prefs.speed)
         _ui.value = _ui.value.copy(
@@ -304,7 +307,25 @@ class ReadAloud private constructor(private val app: Context) {
     }
 
     private fun cut(d: ListenDoc): List<Line> =
-        d.paras.flatMapIndexed { p, text -> SpeechTimings.pieces(text).map { (at, t) -> Line(d.id, p, at, t) } }
+        // A skipped part stays as spaces, so each line keeps its length and the lit word lines up.
+        ListenSkip.apply(d, prefs.skip).flatMapIndexed { p, text -> SpeechTimings.pieces(text).map { (at, t) -> Line(d.id, p, at, t) } }
+
+    /**
+     * Pieces join several short sentences. To start at a word, the piece that holds it is split where that
+     * word's sentence starts, so the voice begins with that sentence and not a few before it.
+     */
+    private fun splitAt(pieces: List<Line>, para: Int, char: Int): List<Line> {
+        if (char <= 0) return pieces
+        val i = pieces.indexOfFirst { it.para == para && char >= it.offset && char < it.offset + it.text.length }
+        if (i < 0) return pieces
+        val l = pieces[i]
+        val rel = char - l.offset
+        val cut = Regex("(?<=[.!?…][\"'”’)\\]]?)\\s+").findAll(l.text).map { it.range.last + 1 }.lastOrNull { it <= rel } ?: return pieces
+        val head = l.text.substring(0, cut).trimEnd()
+        val tail = l.text.substring(cut)
+        if (head.isEmpty() || tail.isBlank()) return pieces
+        return pieces.subList(0, i) + Line(l.doc, l.para, l.offset, head) + Line(l.doc, l.para, l.offset + cut, tail) + pieces.subList(i + 1, pieces.size)
+    }
 
     private fun minutesLeft(line: Int): Int {
         val chars = lines.drop(line).sumOf { it.text.length }
@@ -707,6 +728,10 @@ class ListenPrefs(context: Context) {
     var followAlong: Boolean
         get() = p.getBoolean("followAlong", true)
         set(v) = p.edit().putBoolean("followAlong", v).apply()
+    /** The parts of a page that are not read, by [SkipPart.key]. */
+    var skip: Set<String>
+        get() = p.getStringSet("skip", null) ?: SkipPart.entries.filter { it.default }.map { it.key }.toSet()
+        set(v) = p.edit().putStringSet("skip", v).apply()
     /** Save audio with the last voice used (true) or the default voice (false). */
     var saveWithLast: Boolean
         get() = p.getBoolean("saveWithLast", false)

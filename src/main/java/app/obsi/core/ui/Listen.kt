@@ -48,6 +48,8 @@ import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.FastForward
+import app.obsi.core.speech.SkipPart
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RecordVoiceOver
@@ -628,6 +630,7 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
     var wifiOnly by remember { mutableStateOf(p.wifiOnly) }
     var highlight by remember { mutableStateOf(p.highlightWords) }
     var follow by remember { mutableStateOf(p.followAlong) }
+    var skip by remember { mutableStateOf(p.skip) }
     var confirmDelete by remember { mutableStateOf(false) }
     fun parent(of: String) = if (of == "saved") "offline" else "main"
     androidx.activity.compose.BackHandler(enabled = page != "main") { page = parent(page) }
@@ -677,6 +680,17 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
                 BackRow("Saved audio", { page = "offline" }, subtitle = "$mb on this phone")
                 OfflineAudioList(engine, items, Modifier.fillMaxWidth().weight(1f, fill = false))
             }
+            "skip" -> {
+                BackRow("Skip", { page = "main" })
+                Column(Modifier.padding(horizontal = 20.dp)) {
+                    SkipPart.entries.forEach { part ->
+                        SwitchRow(part.label, part.about, part.key in skip) { on ->
+                            skip = if (on) skip + part.key else skip - part.key
+                            p.skip = skip
+                        }
+                    }
+                }
+            }
             "reading" -> {
                 BackRow("While reading", { page = "main" })
                 Column(Modifier.padding(horizontal = 20.dp)) {
@@ -691,6 +705,10 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
                     SheetRow(Icons.Rounded.RecordVoiceOver, "Default voice", def?.name ?: "Phone voice", def?.let { voiceDetail(it) }) { page = "voices" }
                     SheetRow(Icons.Rounded.Speed, "Speed", speedLabel(u.speed), null) { page = "speed" }
                     SheetRow(Icons.Rounded.Download, "Offline audio", if (keepWithSaves) "On" else "Off", "Save audio to listen with no internet · $mb") { page = "offline" }
+                    SheetRow(
+                        Icons.Rounded.FastForward, "Skip", "",
+                        SkipPart.entries.filter { it.key in skip }.joinToString(", ") { it.label.lowercase() }.ifBlank { "Nothing skipped" }.replaceFirstChar { it.uppercase() },
+                    ) { page = "skip" }
                     SheetRow(Icons.Rounded.GraphicEq, "While reading", "", listOf(if (highlight) "Light up words" else null, if (follow) "follow along" else null).filterNotNull().joinToString(", ").ifBlank { "Nothing marked" }.replaceFirstChar { it.uppercase() }) { page = "reading" }
                 }
             }

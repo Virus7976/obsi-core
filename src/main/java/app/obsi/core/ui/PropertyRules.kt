@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
@@ -174,8 +175,11 @@ fun PropertyRuleSheet(
     onChange: ((TemplateProperty) -> TemplateProperty) -> Unit,
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
+    /** The other names in this template, in lower case. A second property with one of them is refused. */
+    taken: Set<String> = emptySet(),
 ) {
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val twice = p.name.trim().lowercase() in taken
     var rule by remember(p.id) { mutableStateOf(VideoData.ruleOf(p)) }
     SmoothSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(
@@ -186,10 +190,21 @@ fun PropertyRuleSheet(
             // A new property opens ready to type its name.
             val nameFocus = remember { androidx.compose.ui.focus.FocusRequester() }
             val isNew = remember(p.id) { p.name.isBlank() }
+            // Every change is kept as you make it. Done just closes the sheet, so it is clear nothing is lost.
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(if (isNew) "New property" else "Property", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                androidx.compose.material3.Button(
+                    onClick = { scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() } },
+                    enabled = p.name.isNotBlank() && !twice,
+                ) { Text("Done") }
+            }
             LaunchedEffect(p.id) { if (isNew) runCatching { nameFocus.requestFocus() } }
             OutlinedTextField(
                 p.name, { v -> onChange { it.copy(name = v) } }, Modifier.fillMaxWidth().focusRequester(nameFocus),
-                label = { Text("Property") }, singleLine = true, shape = MaterialTheme.shapes.large,
+                label = { Text("Name") }, singleLine = true, shape = MaterialTheme.shapes.large,
+                isError = twice,
+                supportingText = if (twice) ({ Text("This template already has ${p.name.trim()}.") }) else null,
                 placeholder = { Text("Type to find one you use") },
             )
             // The names your vault already uses, closest first, so a typo never makes a second property.

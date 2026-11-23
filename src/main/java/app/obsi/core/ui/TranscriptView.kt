@@ -563,6 +563,9 @@ class TranscriptView(context: Context) : ScrollView(context) {
     /** Called when follow-along pauses (true) or resumes (false). */
     var onAway: (Boolean) -> Unit = {}
 
+    /** Set to offer "Listen from here" on picked words. Gets where the first picked word starts in the text. */
+    var onListenFrom: ((Int) -> Unit)? = null
+
     /** Called when a word is tapped. Return true to say it was handled, so the view does not seek. */
     var onTapWord: (Int) -> Boolean = { false }
 
@@ -878,9 +881,11 @@ class TranscriptView(context: Context) : ScrollView(context) {
             menu.add(Menu.NONE, ID_COLOR + currentColor, 0, "Highlight")
                 .setIcon(dot(HighlightColors.getOrNull(currentColor)?.ui ?: HighlightColors.first().ui))
                 .setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS or MenuItem.SHOW_AS_ACTION_WITH_TEXT)
-            menu.add(Menu.NONE, ID_SENTENCE, 1, "Sentence").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-            menu.add(Menu.NONE, ID_PARAGRAPH, 2, "Paragraph").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
-            menu.add(Menu.NONE, ID_COPY, 3, "Copy")
+            menu.add(Menu.NONE, ID_SENTENCE, 2, "Sentence").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            menu.add(Menu.NONE, ID_PARAGRAPH, 3, "Paragraph").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            // Read aloud from the first picked word.
+            if (onListenFrom != null) menu.add(Menu.NONE, ID_LISTEN, 1, "Listen").setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS)
+            menu.add(Menu.NONE, ID_COPY, 4, "Copy")
             // A Bible verse in the words opens in Obsi Bible.
             val picked = tv.text.subSequence(tv.selectionStart.coerceAtLeast(0), tv.selectionEnd.coerceAtLeast(0)).toString()
             verse = app.obsi.core.link.VerseRefs.find(picked)
@@ -906,6 +911,7 @@ class TranscriptView(context: Context) : ScrollView(context) {
                     }
                 }
                 ID_ERASE -> range?.let { onErase(it.first, it.last) }
+                ID_LISTEN -> range?.let { r -> d.words.getOrNull(r.first)?.let { w -> onListenFrom?.invoke(w.charStart) } }
                 ID_BIBLE -> verse?.let { app.obsi.core.link.VerseRefs.open(context, it) }
                 else -> if (item.itemId >= ID_COLOR && item.itemId < ID_COLOR + HighlightColors.size && range != null) {
                     tv.performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK)
@@ -969,6 +975,7 @@ class TranscriptView(context: Context) : ScrollView(context) {
         const val ID_SENTENCE = 202
         const val ID_PARAGRAPH = 203
         const val ID_BIBLE = 204
+        const val ID_LISTEN = 205
         const val MATCH = 0x66FFD54F
         const val MATCH_NOW = 0xCCFF9800.toInt()
     }
