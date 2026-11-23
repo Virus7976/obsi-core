@@ -498,7 +498,15 @@ class TranscriptView(context: Context) : ScrollView(context) {
         val onlyPictures = !docChanged && s == style && styles === lastStyles && images !== lastImages && imageWidth == lastImageWidth
         // New pictures arrived: put each one in its place. The page is laid out again only around it, not
         // from the top, which on a long article took over a second for every batch of pictures.
-        if (onlyPictures && updatePictures(images)) { lastImages = images; return }
+        if (onlyPictures) {
+            // Pictures above the top line change the page's height. Keep that line where it was on screen.
+            val keep = doc?.let { d -> firstVisibleWord().takeIf { scrollY > 0 && it in d.words.indices }?.let { w -> lineTopOf(d, w)?.let { y -> w to y - scrollY } } }
+            if (updatePictures(images)) {
+                lastImages = images
+                keep?.let { (w, gap) -> doc?.let { d -> lineTopOf(d, w)?.let { y -> scrollTo(0, (y - gap).coerceAtLeast(0)) } } }
+                return
+            }
+        }
         val styleChanged = s != style || styles !== lastStyles || images !== lastImages || imageWidth != lastImageWidth
         lastImageWidth = imageWidth
         doc = newDoc
@@ -882,6 +890,11 @@ class TranscriptView(context: Context) : ScrollView(context) {
         val layout = tv.layout ?: return
         val y = layout.getLineTop(layout.getLineForOffset(d.words[word].charStart)) + tv.paddingTop
         scrollTo(0, (y - dp(12)).coerceAtLeast(0))
+    }
+
+    private fun lineTopOf(d: TranscriptDoc, word: Int): Int? {
+        val layout = tv.layout ?: return null
+        return layout.getLineTop(layout.getLineForOffset(d.words[word].charStart)) + tv.paddingTop
     }
 
     fun scrollToWord(word: Int) {

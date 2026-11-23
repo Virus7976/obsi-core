@@ -126,6 +126,8 @@ class ReadAloud private constructor(private val app: Context) {
 
     @Volatile private var doc: ListenDoc? = null
     @Volatile private var lines: List<Line> = emptyList()
+    /** Where each line starts, in letters from the top of what is read. The last entry is the total. */
+    @Volatile private var lineStarts: IntArray = IntArray(1)
     @Volatile private var lineVoice: SpeakerVoice? = null
     private val words = ConcurrentHashMap<Int, List<WordTime>>()
 
@@ -299,6 +301,7 @@ class ReadAloud private constructor(private val app: Context) {
         val pieces = if (announce && title.isNotBlank()) body.take(at) + Line(d.id, -1, 0, "$title.") + body.drop(at) else body
         doc = d
         lines = pieces
+        lineStarts = IntArray(pieces.size + 1).also { a -> pieces.forEachIndexed { i, l -> a[i + 1] = a[i] + l.text.length } }
         lineVoice = voice
         words.clear()
         val meta = MediaMetadata.Builder()
@@ -346,6 +349,32 @@ class ReadAloud private constructor(private val app: Context) {
         return pieces.subList(0, i) + Line(l.doc, l.para, l.offset, head) + Line(l.doc, l.para, l.offset + cut, tail) + pieces.subList(i + 1, pieces.size)
     }
 
+    // The notification and the lock screen show the whole article as one track, not one sentence.
+    // Its time is a guess from the letters (about 15 a second at normal speed), made exact inside each sentence.
+    private fun letterMs(letters: Int): Long = letters * 1000L / 15
+
+    /** How long the whole article takes at normal speed, in ms. */
+    fun wholeDurationMs(): Long = letterMs(lineStarts.last())
+
+    /** How far into the whole article the voice is, in ms at normal speed. */
+    fun wholePositionMs(): Long {
+        val s = lineStarts
+        val i = player.currentMediaItemIndex
+        if (i < 0 || i + 1 >= s.size) return 0
+        val guess = letterMs(s[i + 1] - s[i])
+        val dur = player.duration
+        val inLine = if (dur > 0) player.currentPosition.coerceIn(0, dur) * guess / dur else 0
+        return letterMs(s[i]) + inLine
+    }
+
+    /** Jumps to the sentence at [ms] into the whole article (the notification's time bar). */
+    fun seekWholeMs(ms: Long) {
+        val s = lineStarts
+        if (s.size < 2) return
+        val letters = ms * 15 / 1000
+        seekToLine(s.indexOfLast { it <= letters }.coerceIn(0, s.size - 2))
+    }
+
     private fun minutesLeft(line: Int): Int {
         val chars = lines.drop(line).sumOf { it.text.length }
         // About 15 letters a second at normal speed.
@@ -375,6 +404,7 @@ class ReadAloud private constructor(private val app: Context) {
         player.clearMediaItems()
         doc = null
         lines = emptyList()
+        lineStarts = IntArray(1)
         _ui.update { ListenUi(speed = it.speed, voice = it.voice) }
     }
 

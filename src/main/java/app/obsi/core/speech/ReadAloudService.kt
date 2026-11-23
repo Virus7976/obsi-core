@@ -81,7 +81,7 @@ class ReadAloudService : MediaSessionService() {
     }
 }
 
-/** Headphone and car buttons step by sentence. The standard previous and next are hidden, so Android draws no second pair. The list of sentences is hidden too. */
+/** The whole article is one track with one time bar. Headphone and car buttons step by sentence. The standard previous and next are hidden, so Android draws no second pair. The list of sentences is hidden too. */
 private class SentencePlayer(player: Player, private val engine: ReadAloud) : ForwardingPlayer(player) {
     private val hidden = listOf(
         Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_NEXT,
@@ -102,4 +102,13 @@ private class SentencePlayer(player: Player, private val engine: ReadAloud) : Fo
     override fun seekToNext() = engine.next()
     override fun seekToPreviousMediaItem() = engine.previous()
     override fun seekToNextMediaItem() = engine.next()
+
+    // One track for the whole article, so the notification's time bar shows all of it, like any other player.
+    override fun getDuration(): Long = engine.wholeDurationMs().takeIf { it > 0 } ?: super.getDuration()
+    override fun getContentDuration(): Long = duration
+    override fun getCurrentPosition(): Long = if (engine.wholeDurationMs() > 0) engine.wholePositionMs() else super.getCurrentPosition()
+    override fun getContentPosition(): Long = currentPosition
+    override fun getBufferedPosition(): Long = currentPosition
+    override fun getContentBufferedPosition(): Long = currentPosition
+    override fun seekTo(positionMs: Long) = engine.seekWholeMs(positionMs)
 }

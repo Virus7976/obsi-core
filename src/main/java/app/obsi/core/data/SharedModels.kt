@@ -162,6 +162,8 @@ data class AppSettings(
     val hideBarsOnScroll: Boolean = true,
     /** The status bar goes too when the bars are hidden. */
     val fullScreenReading: Boolean = true,
+    /** Pictures in articles. Off hides them all, for pages you would rather not see. */
+    val showPictures: Boolean = true,
     /** A small "12%" in the corner while the bars are hidden. */
     val showProgressHidden: Boolean = true,
     /** A link opens in a reading card in the app. Off opens your browser. */
