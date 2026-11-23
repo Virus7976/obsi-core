@@ -12,6 +12,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -99,10 +104,24 @@ fun speedLabel(x: Float): String = "%.2f".format(x).trimEnd('0').trimEnd('.') + 
  * forward a sentence, the speed. A tap on the words opens the full sheet.
  */
 @Composable
-fun ListenBar(engine: ReadAloud, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+fun ListenBar(engine: ReadAloud, onOpen: () -> Unit, modifier: Modifier = Modifier, onSync: (() -> Unit)? = null) {
     val u by engine.ui.collectAsState()
     val scheme = MaterialTheme.colorScheme
     AnimatedVisibility(visible = u.active, modifier = modifier) {
+      Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        // Shown only after you scrolled away from the spoken word. A tap goes back and follows again.
+        AnimatedVisibility(visible = onSync != null, enter = fadeIn() + scaleIn(initialScale = 0.9f), exit = fadeOut() + scaleOut(targetScale = 0.9f)) {
+            Surface(
+                onClick = { onSync?.invoke() }, shape = RoundedCornerShape(24.dp),
+                color = scheme.surfaceContainerHighest, shadowElevation = 4.dp,
+            ) {
+                Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.MyLocation, null, Modifier.size(18.dp), tint = scheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Sync", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
         Surface(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             shape = RoundedCornerShape(22.dp),
@@ -123,7 +142,11 @@ fun ListenBar(engine: ReadAloud, onOpen: () -> Unit, modifier: Modifier = Modifi
                     Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).clickable(onClickLabel = "Read aloud controls", onClick = onOpen).padding(horizontal = 10.dp, vertical = 4.dp)) {
                         Text(u.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
                         Text(
-                            listOfNotNull(u.voice?.name, if (u.minutesLeft > 0) "${u.minutesLeft} min left" else null).joinToString(" · "),
+                            listOfNotNull(
+                                u.voice?.name,
+                                if (u.lines > 0) "${((u.line + 1) * 100 / u.lines).coerceIn(0, 100)}%" else null,
+                                if (u.minutesLeft > 0) "${u.minutesLeft} min left" else null,
+                            ).joinToString(" · "),
                             maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant,
                         )
@@ -136,6 +159,7 @@ fun ListenBar(engine: ReadAloud, onOpen: () -> Unit, modifier: Modifier = Modifi
                 }
             }
         }
+      }
     }
 }
 

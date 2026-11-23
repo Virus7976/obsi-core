@@ -1,6 +1,7 @@
 package app.obsi.core.speech
 
 import android.content.ComponentName
+import app.obsi.core.WorkNotice
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
@@ -547,12 +548,16 @@ class ReadAloud private constructor(private val app: Context) {
                 val dir = keptDir(d.id).apply { mkdirs() }
                 File(dir, "doc.txt").writeText(d.id)
                 var done = 0
+                var made = 0
+                val tag = "keep:${d.id}"
                 _keeps.update { it + (d.id to KeepState(d.id, v.id, 0, pieces.size, running = true)) }
                 try {
                     for (p in pieces) {
                         val n = sha1("${v.id}|${p.text}")
                         val have = listOf("m4a", "mp3", "wav").any { File(dir, "$n.$it").exists() }
                         if (!have) {
+                            WorkNotice.progress(app, tag, "Saving audio", "${d.title} · ${done + 1} of ${pieces.size}", done, pieces.size)
+                            made++
                             if (prefs.wifiOnly && onMobileData()) throw IOException("Waiting for Wi-Fi.")
                             // A dropped connection is common on a phone: try again a few times before giving up.
                             var tries = 0
@@ -576,9 +581,12 @@ class ReadAloud private constructor(private val app: Context) {
                     }
                     prefs.queue(d.id, false)
                     _keeps.update { it + (d.id to KeepState(d.id, v.id, done, pieces.size, running = false)) }
+                    // Only work that took time gets a "saved" notice. Audio that was already there needs none.
+                    if (made > 0) WorkNotice.done(app, tag, "Audio saved", "${d.title} plays with no internet.")
                 } catch (e: Exception) {
-                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    if (e is kotlinx.coroutines.CancellationException) { WorkNotice.cancel(app, tag); throw e }
                     _keeps.update { it + (d.id to KeepState(d.id, v.id, done, pieces.size, running = false, error = keepError(e))) }
+                    WorkNotice.failed(app, tag, "Audio not saved", "${d.title}: ${keepError(e).substringBefore(" Tap")}")
                 }
             }
         }
@@ -610,6 +618,7 @@ class ReadAloud private constructor(private val app: Context) {
 
     fun stopKeep(docId: String) {
         keepJobs.remove(docId)?.cancel()
+        WorkNotice.cancel(app, "keep:$docId")
         prefs.queue(docId, false)
         _keeps.update { m -> m[docId]?.let { m + (docId to it.copy(running = false)) } ?: m }
     }

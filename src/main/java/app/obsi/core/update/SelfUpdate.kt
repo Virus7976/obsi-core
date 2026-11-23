@@ -190,7 +190,11 @@ class SelfUpdate(private val context: Context, private val settings: SettingsSto
                                 out.write(buf, 0, n)
                                 done += n
                                 val now = System.currentTimeMillis()
-                                if (now - last > 120) { last = now; _state.value = UpdateState.Downloading(info, done, total) }
+                                if (now - last > 120) {
+                                    last = now
+                                    _state.value = UpdateState.Downloading(info, done, total)
+                                    WorkNotice.progress(context, "update", "Downloading ${Brand.name} ${info.version}", "${done / 1_000_000} of ${total / 1_000_000} MB", (done / 1024).toInt(), (total / 1024).toInt())
+                                }
                             }
                         }
                     }
@@ -200,9 +204,13 @@ class SelfUpdate(private val context: Context, private val settings: SettingsSto
             }.onSuccess {
                 val ready = UpdateState.Ready(info, it)
                 _state.value = ready
+                WorkNotice.done(context, "update", "${Brand.name} ${info.version} is ready", "Open the app to install it.")
                 if (installWhenDone) { installWhenDone = false; downloaded = ready; finishInstall() }
             }
-                .onFailure { _state.value = UpdateState.Failed(it.message ?: "Download failed.") }
+                .onFailure {
+                    _state.value = UpdateState.Failed(it.message ?: "Download failed.")
+                    WorkNotice.failed(context, "update", "Update not downloaded", it.message ?: "Download failed.")
+                }
         }
     }
 
