@@ -59,11 +59,15 @@ data class ListenDoc(
     val locale: String = "en-US",
     /** What kind of text each part is (heading, caption, footnote number), so it can be skipped. */
     val marks: List<ListenMark> = emptyList(),
+    /** The first word number of each paragraph, so the app can save the place you listened to. */
+    val firstWords: List<Int> = emptyList(),
 )
 
 /** What the player bar and the listen sheet show. */
 data class ListenUi(
     val active: Boolean = false,
+    /** Read to the end, with nothing after it. */
+    val ended: Boolean = false,
     val playing: Boolean = false,
     val loading: Boolean = false,
     val docId: String = "",
@@ -156,7 +160,7 @@ class ReadAloud private constructor(private val app: Context) {
         player.setPlaybackSpeed(prefs.speed)
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _ui.update { it.copy(playing = isPlaying) }
+                _ui.update { it.copy(playing = isPlaying, ended = if (isPlaying) false else it.ended) }
                 if (isPlaying) startTicker()
             }
 
@@ -360,10 +364,12 @@ class ReadAloud private constructor(private val app: Context) {
     }
 
     /** Next sentence. */
+    /** Next sentence. On the last one, the next document in the app's queue. */
     fun next() {
         if (!_ui.value.active) return
         val i = player.currentMediaItemIndex
         if (i + 1 < player.mediaItemCount) player.seekTo(i + 1, 0)
+        else doc?.let { advance(it, skipped = true) }
     }
 
     /** Back a sentence. Late in a sentence, back to its start first, like a music player. */
@@ -424,16 +430,24 @@ class ReadAloud private constructor(private val app: Context) {
      */
     var upNext: (suspend (finished: String) -> Pair<ListenDoc, Int>?)? = null
 
+    /** Set by an app to save where you are: called with the document and the first word of each new paragraph. */
+    var onPlace: ((docId: String, word: Int) -> Unit)? = null
+
     private fun onEnded() {
         val stopHere = _ui.value.sleepMinutes == SLEEP_END
-        _ui.update { it.copy(playing = false, sleepMinutes = if (it.sleepMinutes == SLEEP_END) 0 else it.sleepMinutes) }
+        _ui.update { it.copy(playing = false, ended = true, minutesLeft = 0, sleepMinutes = if (it.sleepMinutes == SLEEP_END) 0 else it.sleepMinutes) }
         val d = doc ?: return
-        val next = upNext ?: return
         if (stopHere) return
+        advance(d, skipped = false)
+    }
+
+    /** Goes on to what the app's queue has next. [skipped]: Next was pressed on the last sentence. */
+    private fun advance(d: ListenDoc, skipped: Boolean) {
+        val next = upNext ?: return
         main.launch {
             val (n, para) = withContext(Dispatchers.IO) { runCatching { next(d.id) }.getOrNull() } ?: return@launch
             // Something else may have started while the next one loaded.
-            if (doc?.id != d.id || player.playbackState != Player.STATE_ENDED) return@launch
+            if (doc?.id != d.id || (!skipped && player.playbackState != Player.STATE_ENDED)) return@launch
             val v = pickVoice(n.locale) ?: return@launch
             start(n, para, v, play = true)
         }
@@ -483,6 +497,7 @@ class ReadAloud private constructor(private val app: Context) {
         }
         val w = ws?.let { SpeechTimings.wordAt(it, t) }
         val range = w?.let { (line.offset + it.start) until (line.offset + it.end) }
+        if (u.para != line.para) doc?.let { d -> d.firstWords.getOrNull(line.para)?.let { w -> onPlace?.invoke(d.id, w) } }
         if (u.line != i || u.para != line.para || u.word != range) {
             _ui.value = u.copy(line = i, para = line.para, word = range, minutesLeft = if (u.line != i) minutesLeft(i) else u.minutesLeft)
         }

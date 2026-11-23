@@ -122,7 +122,7 @@ object ListenSkip {
         return ListenDoc(
             id, title, source,
             d.paras.map { p -> d.text.substring(p.charStart.coerceIn(0, d.text.length), p.charEnd.coerceIn(0, d.text.length)) },
-            locale, marksOf(built),
+            locale, marksOf(built), d.paras.map { it.firstWord },
         )
     }
 }
