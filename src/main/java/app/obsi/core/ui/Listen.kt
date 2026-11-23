@@ -39,6 +39,8 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
@@ -377,19 +379,36 @@ fun VoicePicker(engine: ReadAloud, locale: String, onBack: () -> Unit, title: St
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            TextButton(onClick = { everyLanguage = !everyLanguage }) { Text(if (everyLanguage) "My language" else "All languages") }
+            var menu by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
+                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(20.dp)) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(if (everyLanguage) "Only my language" else "Show all languages") },
+                        leadingIcon = { Icon(Icons.Rounded.Language, null) },
+                        onClick = { menu = false; everyLanguage = !everyLanguage },
+                    )
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text("Get more phone voices") },
+                        leadingIcon = { Icon(Icons.Rounded.Download, null) },
+                        onClick = {
+                            menu = false
+                            if (!PhoneVoices.openVoiceDownloads(ctx)) android.widget.Toast.makeText(ctx, "This phone has no page for more voices.", android.widget.Toast.LENGTH_LONG).show()
+                        },
+                    )
+                }
+            }
         }
         LazyColumn(Modifier.fillMaxWidth().then(if (isDefault) Modifier.fillMaxHeight() else Modifier.heightIn(max = 620.dp)), contentPadding = PaddingValues(bottom = 24.dp)) {
             val groups = listOf(
                 Triple(VoiceKind.EDGE, "Microsoft Edge", "Free natural voices. Needs the internet. Saved as it plays, so it works offline after."),
                 Triple(VoiceKind.PHONE, "On this phone", "Works with no internet."),
                 Triple(VoiceKind.PHONE_ONLINE, "Google online", "Needs the internet once. Saved as it plays, so it works offline after."),
-                Triple(VoiceKind.MICROSOFT, "Microsoft with your key", "Your own free Azure key. Use it if Edge voices stop."),
             )
             // One card per service. Tap a service to open its voices. The one in use starts open.
             for ((kind, title, note) in groups) {
                 val list = shown.filter { it.kind == kind }
-                if (list.isEmpty() && kind != VoiceKind.MICROSOFT) continue
+                if (list.isEmpty()) continue
                 val isOpen = kind in openKinds
                 val inUse = list.firstOrNull { it.id == current }
                 // Each voice is its own row in the list, drawn so the group looks like one card.
@@ -439,19 +458,6 @@ fun VoicePicker(engine: ReadAloud, locale: String, onBack: () -> Unit, title: St
                         if (showKey) MicrosoftKey(engine, err, open = addKey || engine.prefs.msKey.isBlank(), onOpen = { addKey = true }, onDone = { addKey = false })
                         if (showChange) TextButton(onClick = { addKey = true }, modifier = Modifier.padding(start = 8.dp)) { Text("Change the key") }
                     }
-                }
-            }
-            item(key = "more") {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 16.dp)) {
-                    TextButton(onClick = { if (!PhoneVoices.openVoiceDownloads(ctx)) android.widget.Toast.makeText(ctx, "This phone has no page for more voices.", android.widget.Toast.LENGTH_LONG).show() }) {
-                        Icon(Icons.Rounded.Download, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Get more phone voices")
-                    }
-                    Text(
-                        "Opens your phone's voice settings. Google's high quality voices download there for free and then work with no internet.",
-                        Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant,
-                    )
                 }
             }
         }
@@ -617,7 +623,21 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
                 }
             }
             "offline" -> {
-                BackRow("Offline audio", { page = "main" })
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { page = "main" }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
+                    Text("Offline audio", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More") }
+                        androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(20.dp)) {
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("Delete all saved audio", color = scheme.error) },
+                                leadingIcon = { Icon(Icons.Rounded.Delete, null, tint = scheme.error) },
+                                onClick = { menu = false; confirmDelete = true },
+                            )
+                        }
+                    }
+                }
                 Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
                     SwitchRow("Save audio with each save", "Online voices only. Phone voices already work with no internet.", keepWithSaves) { keepWithSaves = it; p.keepWithSaves = it }
                     SettingsGroup("Save audio with")
@@ -626,8 +646,7 @@ fun ListenSettings(engine: ReadAloud, items: List<OfflineItem>, onBack: () -> Un
                     Text("Now: ${engine.keepVoice("en-US")?.name ?: "Phone voice"}", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp))
                     SettingsGroup("Saving")
                     SwitchRow("Only on Wi-Fi", "Saving waits for Wi-Fi, so it uses no mobile data.", wifiOnly) { wifiOnly = it; p.wifiOnly = it }
-                    SheetRow(Icons.Rounded.Download, "Saved audio", "${items.count { engine.keeps.value[it.id]?.complete == true }}", "$mb on this phone") { page = "saved" }
-                    TextButton(onClick = { confirmDelete = true }) { Text("Delete all saved audio", color = scheme.error) }
+                    SheetRow(Icons.Rounded.Download, "Saved audio", "${engine.keptCount()}", "$mb on this phone") { page = "saved" }
                 }
             }
             "saved" -> {

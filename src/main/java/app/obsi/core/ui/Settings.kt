@@ -671,6 +671,7 @@ fun SettingsScreen(
                     onDismiss = { addTag = false },
                 )
                 if (addProp) PropertyDialog(
+                    vault = s.linkedVault(s.vault) ?: s.vaultFolders.keys.firstOrNull(),
                     onDone = { n, value ->
                         if (n.isNotEmpty() && !n.equals("tags", true)) set {
                             it.copy(autoProps = it.autoProps.filterNot { x -> x.name.equals(n, true) } + TemplateProperty("auto:$n", n, value, if (value.contains("{{date")) "date" else ""))
@@ -1127,7 +1128,7 @@ private fun PaletteCard(p: Palette, selected: Boolean, onClick: () -> Unit) {
 
 /** Adds one property to every clip: a name and what goes in it. */
 @Composable
-private fun PropertyDialog(onDone: (String, String) -> Unit, onDismiss: () -> Unit) {
+private fun PropertyDialog(vault: String?, onDone: (String, String) -> Unit, onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var value by remember { mutableStateOf("") }
     val focus = remember { androidx.compose.ui.focus.FocusRequester() }
@@ -1137,7 +1138,22 @@ private fun PropertyDialog(onDone: (String, String) -> Unit, onDismiss: () -> Un
         title = { Text("Add a property") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth().focusRequester(focus), label = { Text("Name") }, singleLine = true, shape = RoundedCornerShape(16.dp))
+                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth().focusRequester(focus), label = { Text("Name") }, placeholder = { Text("Type to find one you use") }, singleLine = true, shape = RoundedCornerShape(16.dp))
+                // The names your vault already uses, so a typo never makes a second property.
+                val known = rememberVaultProperties(vault)
+                val names = remember(known, name) { suggestFor(known.keys.filterNot { it.equals("tags", true) }, name, max = 5) }
+                if (names.isNotEmpty() && known.keys.none { it.equals(name.trim(), true) }) Column {
+                    names.forEach { n ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { name = n }.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(n, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                            val type = vaultTypeToApp(known[n].orEmpty())
+                            if (type.isNotBlank()) Text(PropertyTypes.firstOrNull { it.id == type }?.label ?: type, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 OutlinedTextField(
                     value, { value = it }, Modifier.fillMaxWidth(), label = { Text("Value") }, singleLine = true, shape = RoundedCornerShape(16.dp),
                     textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),

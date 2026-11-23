@@ -223,14 +223,44 @@ object VaultTemplate {
         }
         if (start < 0 || end < 0) return null
         var changed = false
-        for (i in start + 1 until end) {
+        // Every property the note has, tags lines included, so a new one is never added twice.
+        val have = (start + 1 until end).mapNotNull { i -> head.find(lines[i].substringBefore("<%"))?.let { unquote(it.groupValues[1]).lowercase() } }.toSet()
+        var i = start + 1
+        while (i < end) {
             val line = lines[i]
-            if (line.contains("<%")) continue
-            val m = head.find(line) ?: continue
-            val p = t.properties.firstOrNull { it.name.equals(unquote(m.groupValues[1]), true) } ?: continue
-            if (p.ask || p.type == "multitext" || VideoData.ruleOf(p) != PropertyRule.Fixed) continue
-            if (unquote(m.groupValues[2]) == p.value) continue
-            lines[i] = block(p.name, p.value, p.type)
+            val m = if (line.contains("<%")) null else head.find(line)
+            val p = m?.let { mm -> t.properties.firstOrNull { it.name.equals(unquote(mm.groupValues[1]), true) } }
+            if (m == null || p == null || p.ask || VideoData.ruleOf(p) != PropertyRule.Fixed) { i++; continue }
+            if (p.type == "multitext") {
+                // A plain list: the head line and its "- item" lines below. Left alone if a tag is in it.
+                var last = i
+                while (last + 1 < end && lines[last + 1].trimStart().startsWith("-")) last++
+                if ((i..last).any { lines[it].contains("<%") }) { i = last + 1; continue }
+                val now = fields(lines.subList(i, last + 1).joinToString("\n")).firstOrNull()?.value.orEmpty()
+                if (NoteLists.split(now) == NoteLists.split(p.value)) { i = last + 1; continue }
+                val made = block(p.name, p.value, p.type).lines()
+                repeat(last - i + 1) { lines.removeAt(i) }
+                lines.addAll(i, made)
+                end += made.size - (last - i + 1)
+                i += made.size
+                changed = true
+                continue
+            }
+            if (unquote(m.groupValues[2]) != p.value) {
+                lines[i] = block(p.name, p.value, p.type)
+                changed = true
+            }
+            i++
+        }
+        // A property added in the app goes at the end of the properties, so the note has it too. Without
+        // this it never reached the note, and the next read of the note took it away again.
+        val added = t.properties.filter { it.name.lowercase() !in have }
+        if (added.isNotEmpty()) {
+            val made = added.flatMap { p ->
+                val fixed = VideoData.ruleOf(p) == PropertyRule.Fixed && !p.ask
+                block(p.name, if (fixed) p.value else "", p.type).lines()
+            }
+            lines.addAll(end, made)
             changed = true
         }
         return if (changed) lines.joinToString("\n") else null

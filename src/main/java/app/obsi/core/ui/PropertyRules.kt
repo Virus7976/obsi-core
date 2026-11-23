@@ -62,10 +62,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -180,10 +183,32 @@ fun PropertyRuleSheet(
                 .padding(horizontal = 20.dp).padding(bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // A new property opens ready to type its name.
+            val nameFocus = remember { androidx.compose.ui.focus.FocusRequester() }
+            val isNew = remember(p.id) { p.name.isBlank() }
+            LaunchedEffect(p.id) { if (isNew) runCatching { nameFocus.requestFocus() } }
             OutlinedTextField(
-                p.name, { v -> onChange { it.copy(name = v) } }, Modifier.fillMaxWidth(),
+                p.name, { v -> onChange { it.copy(name = v) } }, Modifier.fillMaxWidth().focusRequester(nameFocus),
                 label = { Text("Property") }, singleLine = true, shape = MaterialTheme.shapes.large,
+                placeholder = { Text("Type to find one you use") },
             )
+            // The names your vault already uses, closest first, so a typo never makes a second property.
+            val known = rememberVaultProperties(vault)
+            val names = remember(known, p.name) { suggestFor(known.keys.toList(), p.name, max = 8) }
+            if (names.isNotEmpty() && known.keys.none { it == p.name }) Column {
+                names.forEach { n ->
+                    val type = vaultTypeToApp(known[n].orEmpty())
+                    Row(
+                        Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+                            .clickable { onChange { it.copy(name = n, type = if (it.type.isBlank()) type else it.type) } }
+                            .heightIn(min = 44.dp).padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(n, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                        if (type.isNotBlank()) Text(PropertyTypes.firstOrNull { it.id == type }?.label ?: type, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
             SheetLabel("Type")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PropertyTypes.forEach { t ->
@@ -498,4 +523,48 @@ fun AskSheet(
             }
         }
     }
+}
+
+/** Obsidian's type names in types.json, as the app's type ids. Tags and aliases are lists. */
+fun vaultTypeToApp(t: String): String = when (t) {
+    "tags", "aliases", "multitext" -> "multitext"
+    "text", "number", "date", "datetime", "checkbox" -> t
+    else -> ""
+}
+
+/**
+ * Every property name the vault uses, spelled as Obsidian has it, with its type when Obsidian knows it.
+ * From the vault's .obsidian/types.json, plus names found in notes that it does not list yet.
+ */
+@Composable
+fun rememberVaultProperties(vault: String?): Map<String, String> {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val host = ctx.applicationContext as app.obsi.core.ObsiHost
+    val v = produceState(emptyMap<String, String>(), vault) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val s = host.settings.value
+                val name = vault ?: return@runCatching emptyMap<String, String>()
+                val tree = s.vaultFolders[name]?.let(android.net.Uri::parse)
+                val typed = tree?.let { app.obsi.core.data.VaultScanner.config(ctx, it, "types.json") }
+                    ?.let(app.obsi.core.obsidian.VaultTemplate::types).orEmpty()
+                val out = LinkedHashMap<String, String>()
+                typed.forEach { (k, t) -> out[k] = t }
+                // Names in your templates keep their capitals ("Big Idea"), so they come next.
+                s.templates.flatMap { it.properties }.forEach { p ->
+                    if (p.name.isNotBlank() && out.keys.none { it.equals(p.name, true) }) out[p.name] = p.type
+                }
+                // Names seen in notes, most used first. Notes keep them in lower case, so a name
+                // Obsidian already lists keeps Obsidian's spelling.
+                val seen = HashMap<String, Int>()
+                host.vaults.index(name)?.notes.orEmpty().forEach { n -> n.props.keys.forEach { k -> seen[k] = (seen[k] ?: 0) + 1 } }
+                seen.entries.sortedByDescending { it.value }.forEach { (k, _) ->
+                    if (out.keys.none { it.equals(k, true) }) out[k] = ""
+                }
+                if (out.keys.none { it.equals("tags", true) }) out["tags"] = "tags"
+                out
+            }.getOrDefault(emptyMap())
+        }
+    }
+    return v.value
 }

@@ -635,6 +635,9 @@ class ReadAloud private constructor(private val app: Context) {
         _keeps.value = emptyMap()
     }
 
+    /** How many articles have audio on the phone. */
+    fun keptCount(): Int = keptRoot.listFiles().orEmpty().count { d -> d.isDirectory && d.listFiles().orEmpty().any { it.extension in setOf("m4a", "mp3", "wav") } }
+
     /** Bytes of kept audio, for Settings. */
     fun keptBytes(docId: String? = null): Long =
         (if (docId != null) keptDir(docId).walkTopDown() else keptRoot.walkTopDown()).filter { it.isFile }.sumOf { it.length() }

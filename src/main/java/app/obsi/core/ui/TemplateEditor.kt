@@ -165,7 +165,8 @@ fun TemplateEditorScreen(id: String, onBack: () -> Unit) {
                 t.properties.forEach { p -> PropertyRow(p, vars) { editing = p.id } }
                 AddRow("Add a property") {
                     val pid = UUID.randomUUID().toString()
-                    edit { it.copy(properties = it.properties + TemplateProperty(pid, "new property", "", "")) }
+                    // It starts with no name, so the sheet shows the names your vault already uses.
+                    edit { it.copy(properties = it.properties + TemplateProperty(pid, "", "", "")) }
                     editing = pid
                 }
             }
@@ -216,7 +217,11 @@ fun TemplateEditorScreen(id: String, onBack: () -> Unit) {
                 editing = null
                 edit { it.copy(properties = it.properties.filterNot { x -> x.id == p.id }) }
             },
-            onDismiss = { editing = null },
+            onDismiss = {
+                editing = null
+                // A property left with no name was never really added.
+                if (p.name.isBlank()) edit { it.copy(properties = it.properties.filterNot { x -> x.id == p.id }) }
+            },
         )
     }
 }
