@@ -29,7 +29,14 @@ class PageListen internal constructor(val engine: ReadAloud) {
         internal set
 
     /** True while the voice is on this page, playing or paused. */
-    var hearing: Boolean = false
+    var hearing by mutableStateOf(false)
+        internal set
+
+    /**
+     * The small player shows: for this page, or for another page while its voice is playing.
+     * Another page that is paused is not shown here, so a new page starts clean with its own Listen.
+     */
+    var barShown by mutableStateOf(false)
         internal set
 
     internal var view by mutableStateOf<TranscriptView?>(null)
@@ -86,6 +93,7 @@ fun rememberPageListen(id: String, title: String, source: String, built: Article
     val heard by pl.engine.ui.collectAsState()
     pl.doc = remember(built, id, title, source) { built?.let { ListenSkip.ofArticle(id, title, source, it) } }
     pl.hearing = heard.active && heard.docId == id
+    pl.barShown = heard.active && (pl.hearing || heard.playing)
     pl.paused = !heard.playing
     pl.para = heard.para
     val hearing = pl.hearing
@@ -109,7 +117,7 @@ fun rememberPageListen(id: String, title: String, source: String, built: Article
 /** The small player over the page, and its controls sheet when open. Put it where the player should sit. */
 @Composable
 fun PageListenPlayer(listen: PageListen, modifier: Modifier = Modifier, showBar: Boolean = true) {
-    if (showBar) ListenBar(
+    if (showBar && listen.barShown) ListenBar(
         listen.engine, onOpen = { listen.showSheet = true }, modifier = modifier,
         onSync = if (listen.canSync) ({ listen.sync() }) else null,
     )
