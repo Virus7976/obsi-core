@@ -208,6 +208,8 @@ data class AppSettings(
     val vaultFolderUri: String = "",
     /** Vault name -> folder the user picked, so the app can read tags, folders and notes. */
     val vaultFolders: Map<String, String> = emptyMap(),
+    /** The one folder in the vault for all Obsi apps. Each app has its own folder inside it. */
+    val obsiFolder: String = "Obsi",
     /** True once the first-run walk-through was finished or skipped. */
     val onboarded: Boolean = false,
     val recentTags: List<String> = emptyList(),

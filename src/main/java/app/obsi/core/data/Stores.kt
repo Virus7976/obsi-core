@@ -98,7 +98,11 @@ class SettingsStore(context: Context) : JsonFileStore<AppSettings>(File(context.
             s = s.copy(styleAt = savedAt.coerceAtLeast(1L))
         // ObsiLearn has a Podcasts tab now. It shows once; turn it off in Settings › Look like any tab.
         if (s.tabsVersion < 6 && app.obsi.core.Brand.app == app.obsi.core.ObsiApp.Learn && "podcasts" !in s.homeTabs) s = s.copy(homeTabs = s.homeTabs + "podcasts")
-        return s.copy(tabsVersion = 6)
+        // All Obsi apps keep their notes in one folder now. A template still on the old default goes there too.
+        if (s.tabsVersion < 7) s = s.copy(templates = s.templates.map {
+            if (it.path.trim('/') == "Clippings") it.copy(path = app.obsi.core.obsidian.ObsiFolder.of(s)) else it
+        })
+        return s.copy(tabsVersion = 7)
     }
 
     override fun encode(value: AppSettings) = storeJson.encodeToString(AppSettings.serializer(), value)

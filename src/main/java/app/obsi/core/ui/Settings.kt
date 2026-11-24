@@ -106,6 +106,7 @@ import app.obsi.core.data.TemplateProperty
 import app.obsi.core.data.OmniKind
 import app.obsi.core.data.VaultScanner
 import app.obsi.core.obsidian.Sender
+import app.obsi.core.obsidian.ObsiFolder
 import app.obsi.core.obsidian.VaultTemplate
 import app.obsi.core.update.AdbInstaller
 import app.obsi.core.update.ShizukuInstaller
@@ -454,7 +455,7 @@ fun SettingsScreen(
                 }
                 fun blankTemplate() {
                     val id = UUID.randomUUID().toString().take(12)
-                    set { it.copy(templates = it.templates + ClipTemplate(id = id, name = "New template", properties = listOf(
+                    set { it.copy(templates = it.templates + ClipTemplate(id = id, name = "New template", path = ObsiFolder.of(it), properties = listOf(
                         TemplateProperty(UUID.randomUUID().toString(), "title", "{{title}}"),
                         TemplateProperty(UUID.randomUUID().toString(), "source", "{{url}}"),
                     )), selectedTemplateId = it.selectedTemplateId.ifBlank { id }) }
@@ -690,6 +691,22 @@ fun SettingsScreen(
                     if (s.nameSchema) ListRow("Default subject", s.nameSubject.ifBlank { "None" }, onClick = { editSubject = true })
                 }
                 if (editSubject) TextDialog("Default subject", s.nameSubject, { v -> set { it.copy(nameSubject = v.trim()) } }, { editSubject = false })
+
+                // ----- The one folder for all Obsi apps -----
+                var editRoot by remember { mutableStateOf(false) }
+                Section("Folder") {
+                    ListRow(
+                        "Obsi folder",
+                        "All Obsi apps save in " + ObsiFolder.root(s) + ". This app uses " + ObsiFolder.of(s) + ".",
+                        onClick = { editRoot = true },
+                    )
+                }
+                if (editRoot) TextDialog(
+                    "Obsi folder", ObsiFolder.root(s),
+                    { v -> set { it.copy(obsiFolder = v.trim().trim('/').ifBlank { ObsiFolder.DEFAULT }) } },
+                    { editRoot = false },
+                    help = "Set it the same in each Obsi app. New notes go there.",
+                )
             } }
 
             // ---------- review ----------
@@ -819,7 +836,7 @@ private object SettingsKeys {
     const val reading = "reading font serif sans system custom own text size line height width length short medium long pin player mark current line follow along scroll timestamps"
     const val highlights = "highlights highlight highlighter always show replace content holding word selects sentence paragraph in the note obsidian plain text syntax layout each quote callout bullet inline"
     const val updates = "updates update version install installer android shizuku wireless adb pair pairing code port check on its own sources github repo token mirror skip release"
-    const val obsidian = "obsidian when i tap clip open save file copy share vaults vault folder reindex index tags notes search fill prefill existing already saved always every automatic auto properties property templates template new import export presets clipper settings reset"
+    const val obsidian = "obsidian obsi folder root where when i tap clip open save file copy share vaults vault folder reindex index tags notes search fill prefill existing already saved always every automatic auto properties property templates template new import export presets clipper settings reset"
     const val lock = "lock screen lockscreen player cover minimal words background blurred theme colour black clock date transcript spoken highlight button display over other apps overlay permission"
     const val review = "review round cards limit how many reminder daily notification highlight again remember spaced old quote remind morning evening time"
     const val playback = "playback pause type typing note captions start playing open a video background audio screen off notification keep screen on"
